@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Загрузка фото к отчётам</title>
+<style>
+  /* можно оставить твои стили из версии с красивым UI */
+  body{font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin:0; background:#f8fafc; color:#1e293b}
+  .container{max-width:720px; margin:0 auto; padding:16px}
+  .card{background:#fff; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.1); padding:16px; margin:12px 0}
+  .row{display:flex; gap:12px}
+  .row>*{flex:1}
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 14px; border-radius:8px; border:0; cursor:pointer; background:#ef4444; color:#fff}
+  .btn:disabled{opacity:.5; cursor:not-allowed}
+  select, input{width:100%; height:44px; border:1px solid #e2e8f0; border-radius:8px; padding:8px 10px}
+  .doctor{border-top:1px solid #e5e7eb; padding:16px 0}
+  .file-wrap{border:2px dashed #e2e8f0; border-radius:10px; padding:12px; text-align:center; cursor:pointer}
+  .ok{color:#10b981}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>📸 Загрузка фото</h1>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <label>Сотрудник</label>
+        <select id="nameSel"></select>
+      </div>
+      <div>
+        <label>Месяц</label>
+        <select id="monthSel"></select>
+      </div>
+    </div>
+    <div style="margin-top:12px">
+      <button class="btn" id="showBtn" disabled>Показать список</button>
+    </div>
+  </div>
+
+  <div class="card" id="list">Выберите фильтры и нажмите «Показать список»</div>
+</div>
+
+<script>
+const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzIX1AzaHXqUA5weBfDAaJd9RSsxj6cuvWI1NAUcpDxHlm8es8EOPbtLPbvNhwdXTGu/exec'; // пример: https://script.google.com/macros/s/AKfyc.../exec
+
+const nameSel = document.getElementById('nameSel');
+const monthSel = document.getElementById('monthSel');
+const showBtn  = document.getElementById('showBtn');
+const listDiv  = document.getElementById('list');
+
+// 1) Загрузка метаданых (сотрудники/месяцы)
+async function loadMeta() {
+  nameSel.innerHTML  = '<option value="" selected disabled>Загрузка...</option>';
+  monthSel.innerHTML = '<option value="" selected disabled>Загрузка...</option>';
+  try {
+    const res = await fetch(`${WEB_APP_URL}?fn=meta`);
+    const {names, months} = await res.json();
+    fillSelect(nameSel, names);
+    fillSelect(monthSel, months);
+    toggleShowBtn();
+  } catch (e) {
+    nameSel.innerHTML = '<option>Ошибка загрузки</option>';
+    monthSel.innerHTML = '<option>Ошибка загрузки</option>';
+  }
+}
+function fillSelect(sel, arr) {
+  sel.innerHTML = '<option value="" disabled selected>— выберите —</option>' +
+    arr.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+}
+[nameSel, monthSel].forEach(el => el.addEventListener('change', toggleShowBtn));
+function toggleShowBtn(){ showBtn.disabled = !(nameSel.value && monthSel.value); }
+
+// 2) Показать список врачей
+showBtn.addEventListener('click', async () => {
+  listDiv.innerHTML = 'Поиск данных...';
+  try {
+    const url = `${WEB_APP_URL}?fn=doctors&name=${encodeURIComponent(nameSel.value)}&month=${encodeURIComponent(monthSel.value)}`;
+    const rows = await (await fetch(url)).json();
+    renderRows(rows);
+  } catch (e) {
+    listDiv.textContent = 'Ошибка загрузки: ' + e.message;
+  }
+});
+
+function renderRows(rows){
+  if (!rows.length){
+    listDiv.innerHTML = '<div>Нет записей для выбранных фильтров</div>';
+    return;
+  }
+  listDiv.innerHTML = rows.map(r => {
+    const safeDoctor = escapeHtml(r.doctor);
+    if (r.link){
+      return `
+        <div class="doctor">
+          <div style="font-weight:600">${safeDoctor}</div>
+          <div class="ok">Фото загружено — <a href="${r.link}" target="_blank">Открыть</a></div>
+        </div>`;
+    }
+    return `
+      <div class="doctor">
+        <div style="font-weight:600">${safeDoctor}</div>
+        <label class="file-wrap" onclick="document.getElementById('f_${r.row}').click()">
+          Нажмите для выбора фото
+          <input type="file" accept="image/*" id="f_${r.row}" style="display:none" onchange="showFileName(${r.row})">
+        </label>
+        <div id="fileName_${r.row}" style="display:none; margin:6px 0; color:#ef4444"></div>
+        <button class="btn" id="btn_${r.row}" onclick="upload(${r.row}, '${escapeForJs(safeDoctor)}')">Загрузить фото</button>
+      </div>`;
+  }).join('');
+}
+
+window.showFileName = function(row){
+  const input = document.getElementById(`f_${row}`);
+  const div   = document.getElementById(`fileName_${row}`);
+  if (input.files && input.files[0]) {
+    div.textContent = 'Выбран: ' + input.files[0].name;
+    div.style.display = 'block';
+  }
+};
+
+// 3) Загрузка фото (POST JSON → doPost)
+window.upload = async function(row, doctor){
+  const input = document.getElementById(`f_${row}`);
+  const btn   = document.getElementById(`btn_${row}`);
+  if (!input.files || !input.files[0]) { alert('Пожалуйста, выберите файл'); return; }
+
+  const file = input.files[0];
+  btn.disabled = true; const old = btn.textContent; btn.textContent = 'Загрузка...';
+
+  const base64 = await fileToBase64(file); // без префикса data:
+  const stamp = new Date().toISOString().replace(/[:T]/g,'-').slice(0,19);
+  const suggested = `${stamp} — ${nameSel.value} — ${monthSel.value} — ${doctor}.${file.name.split('.').pop()}`;
+
+  try{
+    // ВАЖНО: no-cors и не читаем res.json()
+    await fetch(WEB_APP_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'upload',
+        payload: {
+          row,
+          filename: file.name,
+          mimeType: file.type || 'image/jpeg',
+          bytes: base64,
+          suggestedName: suggested
+        }
+      })
+    });
+
+    // Дадим скрипту секунду создать файл и записать ссылку
+    setTimeout(refreshDoctors, 1200);
+
+  } catch (e){
+    alert('Ошибка загрузки: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = old;
+  }
+};
+
+
+async function refreshDoctors(){
+  const url = `${WEB_APP_URL}?fn=doctors&name=${encodeURIComponent(nameSel.value)}&month=${encodeURIComponent(monthSel.value)}`;
+  const rows = await (await fetch(url)).json();
+  renderRows(rows);
+}
+
+function fileToBase64(file){
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = e => resolve(String(e.target.result).split(',')[1]);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function escapeForJs(s){ return s.replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/'/g,"\\'"); }
+
+// Запуск
+loadMeta();
+</script>
+</body>
+</html>
