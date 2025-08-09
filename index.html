@@ -5,52 +5,91 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Загрузка фото к отчётам</title>
 <style>
-  /* можно оставить твои стили из версии с красивым UI */
-  body{font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin:0; background:#f8fafc; color:#1e293b}
-  .container{max-width:720px; margin:0 auto; padding:16px}
-  .card{background:#fff; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.1); padding:16px; margin:12px 0}
-  .row{display:flex; gap:12px}
-  .row>*{flex:1}
-  .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 14px; border-radius:8px; border:0; cursor:pointer; background:#ef4444; color:#fff}
-  .btn:disabled{opacity:.5; cursor:not-allowed}
-  select, input{width:100%; height:44px; border:1px solid #e2e8f0; border-radius:8px; padding:8px 10px}
-  .doctor{border-top:1px solid #e5e7eb; padding:16px 0}
-  .file-wrap{border:2px dashed #e2e8f0; border-radius:10px; padding:12px; text-align:center; cursor:pointer}
-  .ok{color:#10b981}
+  :root{
+    --bg:#f5f7fb; --card:#fff; --text:#1e293b; --muted:#6b7280;
+    --accent:#e9413a; --accent-dark:#d7342d;
+    --ok:#16a34a; --ok-btn:#16a34a; --ok-btn-shadow:rgba(22,163,74,.35);
+    --border:#e5e7eb; --ring:#fde2e2;
+    --shadow:0 10px 22px rgba(15,23,42,.08);
+    --shadow-sm:0 6px 14px rgba(15,23,42,.06);
+    --radius:18px;
+  }
+  *{box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:var(--bg);color:var(--text)}
+  .container{max-width:980px;margin:0 auto;padding:20px 14px}
+  h1{display:flex;gap:10px;align-items:center;font-size:28px;margin:0 0 12px}
+  h1::before{content:"📸";}
+
+  .panel{background:var(--card);border-radius:22px;box-shadow:var(--shadow);padding:18px;margin:14px 0}
+  .filters{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  label{font-size:15px;color:var(--muted);display:block;margin-bottom:6px}
+  select{width:100%;height:52px;border:1px solid var(--border);border-radius:16px;padding:10px 14px;font-size:16px;background:#fff}
+
+  .big-btn{margin-top:14px;width:100%;height:56px;border:0;border-radius:16px;
+    background:var(--accent);color:#fff;font-weight:700;font-size:18px;cursor:pointer;
+    box-shadow:0 10px 20px rgba(233,65,58,.25)}
+  .big-btn:active{transform:translateY(1px);background:var(--accent-dark)}
+
+  /* карточки врачей */
+  .doctor{background:var(--card);border-radius:22px;box-shadow:var(--shadow-sm);padding:16px 18px;margin:14px 0}
+  .doc-top{display:flex;align-items:center;gap:10px}
+  .doc-name{font-weight:800;font-size:18px;flex:1}
+  .success{display:flex;align-items:center;gap:12px;color:var(--ok);font-weight:700}
+  .success a.btn-ok{
+    display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:14px;
+    background:var(--ok-btn);color:#fff;text-decoration:none;font-weight:700;box-shadow:0 8px 16px var(--ok-btn-shadow)}
+  .success a.btn-ok:active{transform:translateY(1px)}
+
+  .controls{margin-top:12px;display:flex;gap:14px;align-items:center}
+  .file-wrap{
+    flex:1;min-height:48px;border-radius:16px;border:2px dashed var(--border);
+    background:#fafafa;color:var(--muted);display:flex;align-items:center;justify-content:center;
+    padding:10px 12px;text-align:center}
+  .file-name{margin-left:8px;color:#b91c1c;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  .btn-upload{
+    min-width:140px;height:48px;border:0;border-radius:14px;background:var(--accent);color:#fff;
+    font-weight:800;cursor:pointer;box-shadow:0 8px 16px rgba(233,65,58,.25)}
+  .btn-upload:active{transform:translateY(1px);background:var(--accent-dark)}
+  .hint{color:var(--muted);font-size:14px;margin-top:6px}
+
+  @media (max-width:720px){
+    .filters{grid-template-columns:1fr}
+    .doc-name{font-size:16px}
+    .controls{gap:10px}
+    .btn-upload{min-width:120px}
+  }
 </style>
 </head>
 <body>
-<div class="container">
-  <h1>📸 Загрузка фото</h1>
+  <div class="container">
+    <h1>Загрузка фото</h1>
 
-  <div class="card">
-    <div class="row">
-      <div>
-        <label>Сотрудник</label>
-        <select id="nameSel"></select>
+    <div class="panel">
+      <div class="filters">
+        <div>
+          <label>Сотрудник</label>
+          <select id="nameSel"></select>
+        </div>
+        <div>
+          <label>Месяц</label>
+          <select id="monthSel"></select>
+        </div>
       </div>
-      <div>
-        <label>Месяц</label>
-        <select id="monthSel"></select>
-      </div>
+      <button class="big-btn" id="showBtn" disabled>Показать список</button>
     </div>
-    <div style="margin-top:12px">
-      <button class="btn" id="showBtn" disabled>Показать список</button>
-    </div>
+
+    <div class="panel" id="list">Выберите фильтры и нажмите «Показать список»</div>
   </div>
 
-  <div class="card" id="list">Выберите фильтры и нажмите «Показать список»</div>
-</div>
-
 <script>
-const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzIX1AzaHXqUA5weBfDAaJd9RSsxj6cuvWI1NAUcpDxHlm8es8EOPbtLPbvNhwdXTGu/exec'; // пример: https://script.google.com/macros/s/AKfyc.../exec
+const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzIX1AzaHXqUA5weBfDAaJd9RSsxj6cuvWI1NAUcpDxHlm8es8EOPbtLPbvNhwdXTGu/exec';
 
 const nameSel = document.getElementById('nameSel');
 const monthSel = document.getElementById('monthSel');
 const showBtn  = document.getElementById('showBtn');
 const listDiv  = document.getElementById('list');
 
-// 1) Загрузка метаданых (сотрудники/месяцы)
 async function loadMeta() {
   nameSel.innerHTML  = '<option value="" selected disabled>Загрузка...</option>';
   monthSel.innerHTML = '<option value="" selected disabled>Загрузка...</option>';
@@ -60,33 +99,32 @@ async function loadMeta() {
     fillSelect(nameSel, names);
     fillSelect(monthSel, months);
     toggleShowBtn();
-  } catch (e) {
+  } catch {
     nameSel.innerHTML = '<option>Ошибка загрузки</option>';
     monthSel.innerHTML = '<option>Ошибка загрузки</option>';
   }
 }
-function fillSelect(sel, arr) {
+function fillSelect(sel, arr){
   sel.innerHTML = '<option value="" disabled selected>— выберите —</option>' +
     arr.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
 }
 [nameSel, monthSel].forEach(el => el.addEventListener('change', toggleShowBtn));
 function toggleShowBtn(){ showBtn.disabled = !(nameSel.value && monthSel.value); }
 
-// 2) Показать список врачей
 showBtn.addEventListener('click', async () => {
   listDiv.innerHTML = 'Поиск данных...';
-  try {
+  try{
     const url = `${WEB_APP_URL}?fn=doctors&name=${encodeURIComponent(nameSel.value)}&month=${encodeURIComponent(monthSel.value)}`;
     const rows = await (await fetch(url)).json();
     renderRows(rows);
-  } catch (e) {
+  }catch(e){
     listDiv.textContent = 'Ошибка загрузки: ' + e.message;
   }
 });
 
 function renderRows(rows){
   if (!rows.length){
-    listDiv.innerHTML = '<div>Нет записей для выбранных фильтров</div>';
+    listDiv.innerHTML = '<div class="hint">Нет записей для выбранных фильтров</div>';
     return;
   }
   listDiv.innerHTML = rows.map(r => {
@@ -94,73 +132,65 @@ function renderRows(rows){
     if (r.link){
       return `
         <div class="doctor">
-          <div style="font-weight:600">${safeDoctor}</div>
-          <div class="ok">Фото загружено — <a href="${r.link}" target="_blank">Открыть</a></div>
+          <div class="doc-top">
+            <div class="doc-name">${safeDoctor}</div>
+            <div class="success">Фото загружено — <a class="btn-ok" href="${r.link}" target="_blank" rel="noopener">Открыть</a></div>
+          </div>
         </div>`;
     }
     return `
       <div class="doctor">
-        <div style="font-weight:600">${safeDoctor}</div>
-        <label class="file-wrap" onclick="document.getElementById('f_${r.row}').click()">
-          Нажмите для выбора фото
-          <input type="file" accept="image/*" id="f_${r.row}" style="display:none" onchange="showFileName(${r.row})">
-        </label>
-        <div id="fileName_${r.row}" style="display:none; margin:6px 0; color:#ef4444"></div>
-        <button class="btn" id="btn_${r.row}" onclick="upload(${r.row}, '${escapeForJs(safeDoctor)}')">Загрузить фото</button>
+        <div class="doc-top">
+          <div class="doc-name">${safeDoctor}</div>
+        </div>
+        <div class="controls">
+          <label class="file-wrap" onclick="document.getElementById('f_${r.row}').click()">
+            Нажмите для выбора фото
+            <input type="file" accept="image/*" id="f_${r.row}" style="display:none" onchange="showFileName(${r.row})">
+            <span id="fileName_${r.row}" class="file-name" style="display:none"></span>
+          </label>
+          <button class="btn-upload" id="btn_${r.row}" onclick="upload(${r.row}, '${escapeForJs(safeDoctor)}')">Загрузить</button>
+        </div>
       </div>`;
   }).join('');
 }
 
 window.showFileName = function(row){
   const input = document.getElementById(`f_${row}`);
-  const div   = document.getElementById(`fileName_${row}`);
+  const span  = document.getElementById(`fileName_${row}`);
   if (input.files && input.files[0]) {
-    div.textContent = 'Выбран: ' + input.files[0].name;
-    div.style.display = 'block';
+    span.textContent = 'Выбран: ' + input.files[0].name;
+    span.style.display = 'inline';
   }
 };
 
-// 3) Загрузка фото (POST JSON → doPost)
 window.upload = async function(row, doctor){
   const input = document.getElementById(`f_${row}`);
   const btn   = document.getElementById(`btn_${row}`);
   if (!input.files || !input.files[0]) { alert('Пожалуйста, выберите файл'); return; }
 
   const file = input.files[0];
-  btn.disabled = true; const old = btn.textContent; btn.textContent = 'Загрузка...';
+  btn.disabled = true; const old = btn.textContent; btn.textContent = 'Загрузка…';
 
-  const base64 = await fileToBase64(file); // без префикса data:
+  const base64 = await fileToBase64(file);
   const stamp = new Date().toISOString().replace(/[:T]/g,'-').slice(0,19);
   const suggested = `${stamp} — ${nameSel.value} — ${monthSel.value} — ${doctor}.${file.name.split('.').pop()}`;
 
   try{
-    // ВАЖНО: no-cors и не читаем res.json()
     await fetch(WEB_APP_URL, {
       method: 'POST',
       mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
-        action: 'upload',
-        payload: {
-          row,
-          filename: file.name,
-          mimeType: file.type || 'image/jpeg',
-          bytes: base64,
-          suggestedName: suggested
-        }
+        action:'upload',
+        payload:{ row, filename:file.name, mimeType:file.type||'image/jpeg', bytes:base64, suggestedName:suggested }
       })
     });
-
-    // Дадим скрипту секунду создать файл и записать ссылку
     setTimeout(refreshDoctors, 1200);
-
-  } catch (e){
-    alert('Ошибка загрузки: ' + e.message);
   } finally {
     btn.disabled = false; btn.textContent = old;
   }
 };
-
 
 async function refreshDoctors(){
   const url = `${WEB_APP_URL}?fn=doctors&name=${encodeURIComponent(nameSel.value)}&month=${encodeURIComponent(monthSel.value)}`;
@@ -176,11 +206,9 @@ function fileToBase64(file){
     r.readAsDataURL(file);
   });
 }
-
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 function escapeForJs(s){ return s.replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/'/g,"\\'"); }
 
-// Запуск
 loadMeta();
 </script>
 </body>
