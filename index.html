@@ -6,63 +6,88 @@
 <title>Загрузка фото к отчётам</title>
 <style>
   :root{
-    --bg:#f5f7fb; --card:#fff; --text:#1e293b; --muted:#6b7280;
+    --bg:#f5f7fb; --card:#ffffff; --text:#1e293b; --muted:#6b7280;
     --accent:#e9413a; --accent-dark:#d7342d;
     --ok:#16a34a; --ok-btn:#16a34a; --ok-btn-shadow:rgba(22,163,74,.35);
-    --border:#e5e7eb; --shadow:0 10px 22px rgba(15,23,42,.08);
-    --shadow-sm:0 6px 14px rgba(15,23,42,.06);
+    --border:#efefef;                         /* ← requested EFEFEF */
+    --shadow:0 8px 18px rgba(15,23,42,.06);   /* мягче */
+    --shadow-sm:0 4px 10px rgba(15,23,42,.04);
   }
   *{box-sizing:border-box}
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:var(--bg);color:var(--text)}
   .container{max-width:980px;margin:0 auto;padding:20px 14px}
   h1{display:flex;gap:10px;align-items:center;font-size:28px;margin:0 0 12px}
-  h1::before{content:"📸";}
-  .panel{background:var(--card);border-radius:22px;box-shadow:var(--shadow);padding:18px;margin:14px 0}
+  h1::before{content:"🧾";}
+
+  /* панели и карточки теперь с кантом #EFEFEF */
+  .panel{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:22px;
+    box-shadow:var(--shadow);
+    padding:18px; margin:14px 0;
+  }
+  .doctor{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:22px;
+    box-shadow:var(--shadow-sm);
+    padding:14px 16px; margin:14px 0;
+  }
+
   .filters{display:grid;grid-template-columns:1fr 1fr;gap:14px}
   label{font-size:15px;color:var(--muted);display:block;margin-bottom:6px}
-  select{width:100%;height:52px;border:1px solid var(--border);border-radius:16px;padding:10px 14px;font-size:16px;background:#fff}
-  .big-btn{margin-top:14px;width:100%;height:56px;border:0;border-radius:16px;background:var(--accent);color:#fff;font-weight:700;font-size:18px;cursor:pointer;box-shadow:0 10px 20px rgba(233,65,58,.25)}
+  select{
+    width:100%;height:52px;border:1px solid var(--border);border-radius:16px;
+    padding:10px 14px;font-size:16px;background:#fff
+  }
+  .big-btn{
+    margin-top:14px;width:100%;height:56px;border:0;border-radius:16px;
+    background:var(--accent);color:#fff;font-weight:700;font-size:18px;cursor:pointer;
+    box-shadow:0 10px 20px rgba(233,65,58,.18)
+  }
   .big-btn:active{transform:translateY(1px);background:var(--accent-dark)}
 
-  .doctor{background:var(--card);border-radius:22px;box-shadow:var(--shadow-sm);padding:14px 16px;margin:14px 0}
   .doc-top{display:flex;gap:12px;align-items:center}
   .doc-name{font-weight:800;font-size:18px;flex:1;min-width:180px}
-
   .success{display:flex;align-items:center;gap:12px;color:var(--ok);font-weight:700;white-space:nowrap}
 
   .controls-inline{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;white-space:nowrap}
-  .file-name{max-width:300px;color:#b91c1c;font-weight:600;overflow:hidden;text-overflow:ellipsis}
+
+  .btn-gray{
+    height:44px; padding:0 16px; border:2px dashed var(--border); border-radius:14px;
+    background:#fafafa; color:#6b7280; font-weight:700; cursor:pointer; transition:.15s;
+  }
+  .btn-gray.selected{ border-color:#86efac; background:#f0fdf4; color:#166534; }
+
   .btn-upload{
     height:44px; padding:0 16px; border:0; border-radius:14px; background:var(--accent); color:#fff;
-    font-weight:800; cursor:pointer; box-shadow:0 8px 16px rgba(233,65,58,.25)
+    font-weight:800; cursor:pointer; box-shadow:0 8px 16px rgba(233,65,58,.18); transition:.15s;
   }
-  .btn-gray{
-    height:44px; padding:0 16px; border:2px dashed var(--border); border-radius:14px; background:#fafafa; color:#6b7280; font-weight:700; cursor:pointer;
-  }
+  .btn-upload:active{transform:translateY(1px);background:var(--accent-dark)}
+  .btn-upload:disabled{ background:#e5e7eb; color:#9ca3af; box-shadow:none; cursor:not-allowed; }
+
   .btn-danger{
     height:40px; padding:0 14px; border:0; border-radius:12px; background:#fee2e2; color:#b91c1c; font-weight:800; cursor:pointer;
   }
-  .btn-upload:active{transform:translateY(1px);background:var(--accent-dark)}
   .btn-danger:disabled{opacity:.6;cursor:not-allowed}
 
   @media (max-width:720px){
     .filters{grid-template-columns:1fr}
     .doc-top{flex-direction:column; align-items:flex-start}
     .controls-inline{justify-content:flex-start}
-    .file-name{max-width:100%}
   }
 
-  /* крошечная кнопка сброса сохранённого выбора */
   .reset-link{margin-top:8px;font-size:13px;color:#6b7280;cursor:pointer;text-decoration:underline}
 </style>
 </head>
 <body>
   <div class="container">
-    <h1>Отчет УВК</h1>
+    <h1>УВК отчет</h1>
 
     <div class="panel">
       <div class="filters">
-        <div><label>Сотрудник</label><select id="nameSel"></select></div>
+        <div><label>МП</label><select id="nameSel"></select></div>
         <div><label>Месяц</label><select id="monthSel"></select></div>
       </div>
       <button class="big-btn" id="showBtn" disabled>Показать список</button>
@@ -73,13 +98,9 @@
   </div>
 
 <script>
-const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzkZl9EYJSIndXxUeK5P6IzIMpmre8nkwUtyl3L3KQNusJk9hGM-ij7kvU0j1Crr_BX/exec';
-
-// ключи для localStorage
-const LS_KEYS = {
-  name:  'lf_name',
-  month: 'lf_month'
-};
+const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwiXKkWcZeOaYzd9H8QOxwIx3sWoymgySJ54iC7DzG25AKo7Vh-htHyzDwObIdNZC07/exec';
+const ENABLE_DELETE = false;
+const LS_KEYS = { name:'lf_name', month:'lf_month' };
 
 const nameSel = document.getElementById('nameSel');
 const monthSel = document.getElementById('monthSel');
@@ -94,32 +115,23 @@ async function loadMeta(){
     const {names, months} = await r.json();
     fillSelect(nameSel, names);
     fillSelect(monthSel, months);
-
-    // восстановим сохранённый выбор, если он ещё существует в списках
     restoreSavedChoice(names, months);
-
     toggleShowBtn();
   }catch{
     nameSel.innerHTML = monthSel.innerHTML = '<option>Ошибка</option>';
   }
 }
-
 function fillSelect(sel, arr){
   sel.innerHTML = '<option disabled selected>— выберите —</option>' +
     arr.map(v=>`<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
 }
-
 [nameSel,monthSel].forEach(el=>el.addEventListener('change', ()=>{
-  toggleShowBtn();
-  saveChoice();                // сохраняем при каждом изменении
+  toggleShowBtn(); saveChoice();
 }));
-
 function toggleShowBtn(){ showBtn.disabled = !(nameSel.value && monthSel.value); }
 
 showBtn.addEventListener('click', async ()=>{
-  // на всякий случай ещё раз сохраним
   saveChoice();
-
   listDiv.innerHTML = 'Поиск данных...';
   try{
     const url = `${WEB_APP_URL}?fn=doctors&name=${encodeURIComponent(nameSel.value)}&month=${encodeURIComponent(monthSel.value)}`;
@@ -128,7 +140,7 @@ showBtn.addEventListener('click', async ()=>{
   }catch(e){ listDiv.textContent = 'Ошибка: ' + e.message; }
 });
 
-// ======== сохранение выбора на устройстве ========
+// localStorage
 function saveChoice(){
   try{
     if (nameSel.value)  localStorage.setItem(LS_KEYS.name,  nameSel.value);
@@ -136,51 +148,41 @@ function saveChoice(){
     resetLink.style.display = (nameSel.value || monthSel.value) ? 'block' : 'none';
   }catch(_e){}
 }
-
 function restoreSavedChoice(names, months){
   try{
     const savedName  = localStorage.getItem(LS_KEYS.name);
     const savedMonth = localStorage.getItem(LS_KEYS.month);
-
-    // применяем только если значения всё ещё существуют в списках
-    if (savedName && names.includes(savedName)) {
-      nameSel.value = savedName;
-    }
-    if (savedMonth && months.includes(savedMonth)) {
-      monthSel.value = savedMonth;
-    }
-
-    // если хотя бы одно восстановили — покажем ссылку "сбросить"
+    if (savedName && names.includes(savedName))  nameSel.value = savedName;
+    if (savedMonth && months.includes(savedMonth)) monthSel.value = savedMonth;
     resetLink.style.display = (nameSel.value || monthSel.value) ? 'block' : 'none';
   }catch(_e){}
 }
-
-// ручной сброс сохранённых значений
 resetLink.addEventListener('click', ()=>{
   try{
     localStorage.removeItem(LS_KEYS.name);
     localStorage.removeItem(LS_KEYS.month);
   }catch(_e){}
-  nameSel.selectedIndex = 0;
-  monthSel.selectedIndex = 0;
-  toggleShowBtn();
-  resetLink.style.display = 'none';
+  nameSel.selectedIndex = 0; monthSel.selectedIndex = 0;
+  toggleShowBtn(); resetLink.style.display = 'none';
   listDiv.innerHTML = 'Выберите фильтры и нажмите «Показать список»';
 });
 
-// ======== остальной код без изменений по логике ========
+// список
 function renderRows(rows){
   if(!rows.length){ listDiv.innerHTML = '<div>Нет записей</div>'; return; }
   listDiv.innerHTML = rows.map(r=>{
     const doc = escapeHtml(r.doctor);
     if(r.link){
+      const deleteBtn = ENABLE_DELETE
+        ? `<button class="btn-danger" onclick="delPhoto(${r.row}, '${escapeForJs(doc)}')">Удалить фото</button>`
+        : '';
       return `
         <div class="doctor">
           <div class="doc-top">
             <div class="doc-name">${doc}</div>
             <div class="controls-inline">
               <span class="success">Фото загружено</span>
-              <button class="btn-danger" onclick="delPhoto(${r.row}, '${escapeForJs(doc)}')">Удалить фото</button>
+              ${deleteBtn}
             </div>
           </div>
         </div>`;
@@ -190,22 +192,26 @@ function renderRows(rows){
         <div class="doc-top">
           <div class="doc-name">${doc}</div>
           <div class="controls-inline">
-            <!-- без capture: будет выбор камера/галерея -->
-            <input type="file" accept="image/*" id="f_${r.row}" style="display:none" onchange="showFileName(${r.row})">
-            <button class="btn-gray" onclick="choose(${r.row})">Выбрать фото</button>
-            <span id="fileName_${r.row}" class="file-name" style="display:none"></span>
-            <button class="btn-upload" id="btn_${r.row}" onclick="upload(${r.row}, '${escapeForJs(doc)}')">Загрузить</button>
+            <input type="file" accept="image/*" id="f_${r.row}" style="display:none" onchange="onFileChange(${r.row})">
+            <button class="btn-gray" id="choose_${r.row}" onclick="choose(${r.row})">Выбрать фото</button>
+            <button class="btn-upload" id="btn_${r.row}" onclick="upload(${r.row}, '${escapeForJs(doc)}')" disabled>Загрузить</button>
           </div>
         </div>
       </div>`;
   }).join('');
 }
 
+// выбор файла
 window.choose = (row)=>document.getElementById('f_'+row).click();
-window.showFileName = (row)=>{
-  const input = document.getElementById(`f_${row}`);
-  const span  = document.getElementById(`fileName_${r.row}`);
-  if(input.files && input.files[0]){ span.textContent = 'Выбран: ' + input.files[0].name; span.style.display = 'inline'; }
+window.onFileChange = (row)=>{
+  const input  = document.getElementById(`f_${row}`);
+  const choose = document.getElementById(`choose_${row}`);
+  const btn    = document.getElementById(`btn_${row}`);
+  if (input.files && input.files.length > 0) {
+    choose.textContent = 'Фото выбрано'; choose.classList.add('selected'); btn.disabled = false;
+  } else {
+    choose.textContent = 'Выбрать фото'; choose.classList.remove('selected'); btn.disabled = true;
+  }
 };
 
 const MAX_MB = 12;
@@ -213,17 +219,13 @@ window.upload = async function(row, doctor){
   const input = document.getElementById(`f_${row}`);
   const btn   = document.getElementById(`btn_${row}`);
   if(!input.files || !input.files[0]){ alert('Выберите файл'); return; }
-
   const file = input.files[0];
   if(file.size > MAX_MB*1024*1024){ alert('Слишком большой файл'); return; }
 
   btn.disabled = true;
   const originalText = btn.textContent;
   const t0 = Date.now();
-  const timer = setInterval(()=>{
-    const s = ((Date.now()-t0)/1000).toFixed(1);
-    btn.textContent = `Загрузка… ${s}с`;
-  }, 200);
+  const timer = setInterval(()=>{ btn.textContent = `Загрузка… ${((Date.now()-t0)/1000).toFixed(1)}с`; }, 200);
 
   const base64 = await fileToBase64(file);
   const stamp = new Date().toISOString().replace(/[:T]/g,'-').slice(0,19);
@@ -231,48 +233,34 @@ window.upload = async function(row, doctor){
 
   try{
     await fetch(WEB_APP_URL, {
-      method:'POST',
-      mode:'no-cors',
+      method:'POST', mode:'no-cors',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        action:'upload',
-        payload:{
-          row,
-          filename:file.name,
-          mimeType:file.type || 'image/jpeg',
-          bytes:base64,
-          suggestedName:suggested
-        }
-      })
+      body: JSON.stringify({ action:'upload', payload:{
+        row, filename:file.name, mimeType:file.type || 'image/jpeg',
+        bytes:base64, suggestedName:suggested
+      }})
     });
     await pollUntilLinked(row, 10000, 1000);
   }finally{
     clearInterval(timer);
-    btn.disabled = false;
-    btn.textContent = originalText;
+    btn.textContent = originalText; btn.disabled = false;
   }
 };
 
+// (удаление скрыто флагом)
 window.delPhoto = async function(row){
   if(!confirm('Удалить загруженное фото?')) return;
   try{
-    await fetch(WEB_APP_URL, {
-      method:'POST',
-      mode:'no-cors',
+    await fetch(WEB_APP_URL, { method:'POST', mode:'no-cors',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        action:'delete',
-        payload:{ row }
-      })
+      body: JSON.stringify({ action:'delete', payload:{ row } })
     });
     await pollUntilUnlinked(row, 10000, 1000);
-  }catch(e){
-    alert('Ошибка удаления: ' + e.message);
-  }finally{
-    renderRows(await fetchDoctors());
-  }
+  }catch(e){ alert('Ошибка удаления: ' + e.message); }
+  finally{ renderRows(await fetchDoctors()); }
 };
 
+// helpers
 async function pollUntilLinked(row, timeout=10000, interval=1000){
   const start = Date.now();
   while(Date.now() - start < timeout){
@@ -283,7 +271,6 @@ async function pollUntilLinked(row, timeout=10000, interval=1000){
   }
   renderRows(await fetchDoctors());
 }
-
 async function pollUntilUnlinked(row, timeout=10000, interval=1000){
   const start = Date.now();
   while(Date.now() - start < timeout){
@@ -294,13 +281,11 @@ async function pollUntilUnlinked(row, timeout=10000, interval=1000){
   }
   renderRows(await fetchDoctors());
 }
-
 async function fetchDoctors(){
   const url = `${WEB_APP_URL}?fn=doctors&name=${encodeURIComponent(nameSel.value)}&month=${encodeURIComponent(monthSel.value)}`;
   const res = await fetch(url);
   return res.json();
 }
-
 function fileToBase64(file){
   return new Promise((resolve, reject)=>{
     const r = new FileReader();
@@ -309,7 +294,6 @@ function fileToBase64(file){
     r.readAsDataURL(file);
   });
 }
-
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 function escapeForJs(s){ return s.replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/'/g,"\\'"); }
 
