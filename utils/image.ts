@@ -4,7 +4,7 @@
  * @param maxWidth Max width of the output image.
  * @param quality JPEG quality (0 to 1).
  */
-export const compressImage = (file: File, maxWidth = 1280, quality = 0.7): Promise<string> => {
+export const compressImage = (file: File, maxWidth = 256, quality = 0.45): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);

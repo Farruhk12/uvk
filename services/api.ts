@@ -1,4 +1,5 @@
 import { getSupabaseClient } from './supabaseClient';
+import { compressImage } from '../utils/image';
 import {
   User,
   Client,
@@ -872,4 +873,121 @@ export const insertMpUsers = async (rows: MpUserRow[]): Promise<ApiResponse> => 
     }
   }
   return { success: true };
+};
+
+/** Размер хранилища чеков (фото) в байтах. */
+export interface StorageUsage {
+  usedBytes: number;
+  fileCount: number;
+  error?: string;
+}
+
+export const fetchStorageUsage = async (): Promise<StorageUsage> => {
+  try {
+    let totalBytes = 0;
+    let fileCount = 0;
+    const limit = 1000;
+    let offset = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data, error } = await supabase.storage
+        .from('checks')
+        .list('', { limit, offset });
+
+      if (error) {
+        console.error('Error listing storage:', error);
+        return { usedBytes: 0, fileCount: 0, error: error.message };
+      }
+
+      const items = data || [];
+      for (const item of items) {
+        if (item.id != null) {
+          const size = (item as any).metadata?.size;
+          if (size != null) totalBytes += Number(size);
+          fileCount++;
+        }
+      }
+
+      if (items.length < limit) hasMore = false;
+      else offset += limit;
+    }
+
+    return { usedBytes: totalBytes, fileCount };
+  } catch (e) {
+    console.error('Unexpected error fetching storage:', e);
+    return {
+      usedBytes: 0,
+      fileCount: 0,
+      error: e instanceof Error ? e.message : 'Ошибка загрузки'
+    };
+  }
+};
+
+const dataUrlToBlob = (dataUrl: string): Blob => {
+  const [meta, base64] = dataUrl.split(',');
+  const mimeMatch = meta.match(/data:(.*);base64/);
+  const mime = mimeMatch?.[1] || 'image/jpeg';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+};
+
+const getStoragePathFromUrl = (imageUrl: string): string | null => {
+  const match = imageUrl.match(/\/checks\/([^?]+)/);
+  return match ? match[1] : null;
+};
+
+export interface CompressExistingResult {
+  success: boolean;
+  compressed: number;
+  failed: number;
+  error?: string;
+}
+
+export const compressExistingChecks = async (
+  month: string,
+  onProgress?: (current: number, total: number, status: string) => void
+): Promise<CompressExistingResult> => {
+  const checks = await fetchChecksForAdmin(month);
+  const toProcess = checks.filter((c) => c.imageUrl && getStoragePathFromUrl(c.imageUrl));
+  const total = toProcess.length;
+  let compressed = 0;
+  let failed = 0;
+
+  for (let i = 0; i < toProcess.length; i++) {
+    const check = toProcess[i];
+    const path = check.imageUrl ? getStoragePathFromUrl(check.imageUrl) : null;
+    if (!path) {
+      failed++;
+      continue;
+    }
+
+    onProgress?.(i + 1, total, `Сжатие ${check.clientName}...`);
+
+    try {
+      const res = await fetch(check.imageUrl!, { mode: 'cors' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const file = new File([blob], path, { type: blob.type || 'image/jpeg' });
+      const compressedData = await compressImage(file);
+      const compressedBlob = dataUrlToBlob(compressedData);
+
+      const { error } = await supabase.storage
+        .from('checks')
+        .upload(path, compressedBlob, {
+          contentType: 'image/jpeg',
+          upsert: true
+        });
+
+      if (error) throw error;
+      compressed++;
+    } catch (e) {
+      console.error('Compress failed for', check.id, e);
+      failed++;
+    }
+  }
+
+  return { success: failed === 0, compressed, failed };
 };

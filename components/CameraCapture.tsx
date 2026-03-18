@@ -90,7 +90,7 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture, onClose
 
     if (video.videoWidth === 0 || video.videoHeight === 0) return;
 
-    const maxDim = 1280;
+    const maxDim = 256;
     let w = video.videoWidth;
     let h = video.videoHeight;
     if (w > maxDim || h > maxDim) {
@@ -117,7 +117,7 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture, onClose
                 onCapture(file);
                 onClose();
             }
-        }, 'image/jpeg', 0.7);
+        }, 'image/jpeg', 0.45);
     }
   };
 

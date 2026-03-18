@@ -17,9 +17,11 @@ import {
   fetchUsers,
   saveMpUser,
   deleteMpUser,
-  insertMpUsers
+  insertMpUsers,
+  fetchStorageUsage,
+  compressExistingChecks
 } from '../services/api';
-import { MONTH_NAMES, getMonthOptions } from '../constants';
+import { MONTH_NAMES, getMonthOptions, STORAGE_LIMIT_BYTES } from '../constants';
 import { isClientSentByStatus } from '../utils/status';
 import {
   LogOut,
@@ -43,7 +45,8 @@ import {
   Image as ImageIcon,
   MessageCircle,
   Send,
-  Search
+  Search,
+  HardDrive
 } from 'lucide-react';
 import { CheckImageViewer } from './CheckImageViewer';
 
@@ -113,6 +116,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   const [checksOblast, setChecksOblast] = useState<string>('');
   const [checksGroup, setChecksGroup] = useState<string>('');
   const [checksEmployee, setChecksEmployee] = useState<string>('');
+  const [checksCompressing, setChecksCompressing] = useState(false);
+  const [compressProgress, setCompressProgress] = useState<{ current: number; total: number; status: string } | null>(null);
 
   // State for Database (Excel) Tab
   const [dbMonth, setDbMonth] = useState<string>('');
@@ -135,6 +140,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   const [mpUsersOblast, setMpUsersOblast] = useState<string>('');
   const [mpUsersGroup, setMpUsersGroup] = useState<string>('');
   const [mpUsersSearch, setMpUsersSearch] = useState<string>('');
+  const [storageUsed, setStorageUsed] = useState<number | null>(null);
+  const [storageLoading, setStorageLoading] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingMpUserId, setEditingMpUserId] = useState<string | null>(null);
   const [userForm, setUserForm] = useState({ login: '', pass: '', mp_name: '', oblast: '', group: '' });
@@ -493,6 +500,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     if (checksMonth) handleLoadChecks(checksMonth);
   };
 
+  const handleCompressExistingChecks = async () => {
+    if (!checksMonth) return;
+    if (!confirm(`Сжать все фото чеков за «${checksMonth}»? Существующие файлы будут заменены сжатыми версиями.`)) return;
+    setChecksCompressing(true);
+    setCompressProgress(null);
+    try {
+      const result = await compressExistingChecks(checksMonth, (cur, tot, status) => {
+        setCompressProgress({ current: cur, total: tot, status });
+      });
+      setCompressProgress(null);
+      if (result.compressed > 0 || result.failed === 0) {
+        alert(`Готово. Сжато: ${result.compressed}, ошибок: ${result.failed}.`);
+        loadStorageUsage();
+      } else {
+        alert(`Ошибка. Сжато: ${result.compressed}, ошибок: ${result.failed}. Выполните миграцию supabase_migration_storage_checks_update.sql в Supabase.`);
+      }
+    } catch (e) {
+      setCompressProgress(null);
+      alert('Ошибка: ' + (e instanceof Error ? e.message : 'Не удалось сжать'));
+    } finally {
+      setChecksCompressing(false);
+    }
+  };
+
   const handleUpdateCheckStatus = async (
     id: string,
     status: 'approved' | 'rejected',
@@ -736,6 +767,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   useEffect(() => {
     if (activeTab === 'users') loadMpUsers();
   }, [activeTab, loadMpUsers]);
+
+  const loadStorageUsage = useCallback(async () => {
+    if (user.role !== 'admin') return;
+    setStorageLoading(true);
+    try {
+      const res = await fetchStorageUsage();
+      setStorageUsed(res.usedBytes);
+    } catch {
+      setStorageUsed(null);
+    } finally {
+      setStorageLoading(false);
+    }
+  }, [user.role]);
+
+  useEffect(() => {
+    if (user.role === 'admin' && visibleTabs.includes('checks')) {
+      loadStorageUsage();
+    }
+  }, [user.role, visibleTabs, loadStorageUsage]);
 
   const filteredMpUsers = useMemo(() => {
     const norm = (s: string) => (s || '').toString().trim().toLowerCase();
@@ -1037,10 +1087,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
         
         <div className="relative z-10 flex justify-between items-start">
           <div>
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${user.role === 'admin' ? 'bg-red-500' : 'bg-blue-500'}`}>
                     {user.role === 'admin' ? 'SuperAdmin' : 'Manager'}
                 </span>
+                {user.role === 'admin' && (
+                  <button
+                    type="button"
+                    onClick={() => loadStorageUsage()}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white/10 text-slate-200 hover:bg-white/15 transition-colors"
+                    title="Хранилище фото чеков (нажмите для обновления)"
+                  >
+                    <HardDrive size={14} />
+                    {storageLoading ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : storageUsed != null ? (
+                      <>
+                        {(storageUsed / 1024 / 1024).toFixed(1)} МБ / {(STORAGE_LIMIT_BYTES / 1024 / 1024).toFixed(0)} МБ
+                        <span className="text-slate-400">
+                          ({((storageUsed / STORAGE_LIMIT_BYTES) * 100).toFixed(0)}%)
+                        </span>
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </button>
+                )}
             </div>
             <h1 className="text-2xl font-bold">{user.mpName}</h1>
             <p className="text-slate-400 text-sm">Панель управления</p>
@@ -1479,8 +1551,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                 >
                   Показать
                 </button>
+                {checks.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleCompressExistingChecks}
+                    disabled={!checksMonth || checksCompressing}
+                    className="flex items-center justify-center gap-1.5 px-4 py-2 bg-slate-600 text-white rounded-xl text-sm font-semibold hover:bg-slate-700 disabled:opacity-50 disabled:pointer-events-none"
+                    title="Сжать все фото за выбранный месяц (освободит место)"
+                  >
+                    {checksCompressing ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        {compressProgress ? `${compressProgress.current}/${compressProgress.total}` : 'Сжатие...'}
+                      </>
+                    ) : (
+                      'Сжать существующие'
+                    )}
+                  </button>
+                )}
               </div>
             </div>
+            {compressProgress && (
+              <p className="text-xs text-slate-500 px-1">{compressProgress.status}</p>
+            )}
 
             {/* Sub-tabs */}
             {checksLoadTriggered && checksMonth && !checksLoading && checks.length > 0 && (
