@@ -90,7 +90,7 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture, onClose
 
     if (video.videoWidth === 0 || video.videoHeight === 0) return;
 
-    const maxDim = 256;
+    const maxDim = 800;
     let w = video.videoWidth;
     let h = video.videoHeight;
     if (w > maxDim || h > maxDim) {
