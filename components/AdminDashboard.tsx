@@ -19,7 +19,8 @@ import {
   deleteMpUser,
   insertMpUsers,
   fetchStorageUsage,
-  compressExistingChecks
+  compressExistingChecks,
+  deleteCheck
 } from '../services/api';
 import { MONTH_NAMES, getMonthOptions, STORAGE_LIMIT_BYTES } from '../constants';
 import { isClientSentByStatus } from '../utils/status';
@@ -113,6 +114,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   const [checksSubTab, setChecksSubTab] = useState<'pending' | 'approved' | 'rejected'>('pending');
   const [rejectingCheckId, setRejectingCheckId] = useState<string | null>(null);
   const [rejectComment, setRejectComment] = useState('');
+  const [deletingCheckId, setDeletingCheckId] = useState<string | null>(null);
   const [checksOblast, setChecksOblast] = useState<string>('');
   const [checksGroup, setChecksGroup] = useState<string>('');
   const [checksEmployee, setChecksEmployee] = useState<string>('');
@@ -549,6 +551,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     setRejectingCheckId(null);
     setRejectComment('');
     return true;
+  };
+
+  const handleDeleteCheck = async (id: string, imageUrl?: string): Promise<void> => {
+    if (!confirm('Удалить чек безвозвратно? Файл и запись будут удалены.')) return;
+    setDeletingCheckId(id);
+    try {
+      const res = await deleteCheck(id, imageUrl);
+      if (!res.success) {
+        alert(res.error || 'Не удалось удалить чек');
+        return;
+      }
+      setChecks((prev) => prev.filter((c) => c.id !== id));
+    } finally {
+      setDeletingCheckId(null);
+    }
   };
 
   const checksFilteredByRegion = useMemo(() => {
@@ -1733,16 +1750,79 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                       </div>
                     )}
 
-                    {/* Actions for approved/rejected - just view */}
-                    {(item.status === 'approved' || item.status === 'rejected') && (
+                    {/* Actions for approved - view + reject */}
+                    {item.status === 'approved' && (
                       <div className="mt-3 pt-3 border-t border-slate-100">
-                        <button
-                          onClick={() => setSelectedCheck({ imageUrl: item.imageUrl, approvedAmount: item.approvedAmount, id: item.id, status: item.status })}
-                          className="w-full py-2 text-xs font-semibold bg-slate-100 text-slate-700 rounded-xl flex items-center justify-center gap-1"
-                        >
-                          <ImageIcon size={14} />
-                          Открыть чек
-                        </button>
+                        {rejectingCheckId === item.id ? (
+                          <div className="space-y-2 animate-in slide-in-from-top-2 duration-200">
+                            <textarea
+                              value={rejectComment}
+                              onChange={(e) => setRejectComment(e.target.value)}
+                              placeholder="Причина отклонения..."
+                              className="w-full p-3 text-sm border border-red-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-300 resize-none bg-red-50/50"
+                              rows={2}
+                              autoFocus
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => { setRejectingCheckId(null); setRejectComment(''); }}
+                                className="flex-1 py-2 text-xs font-semibold bg-slate-100 text-slate-600 rounded-xl"
+                              >
+                                Отмена
+                              </button>
+                              <button
+                                onClick={() => handleUpdateCheckStatus(item.id, 'rejected', rejectComment)}
+                                className="flex-1 py-2 text-xs font-semibold bg-red-500 text-white rounded-xl flex items-center justify-center gap-1"
+                              >
+                                <Send size={12} />
+                                Отклонить
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setSelectedCheck({ imageUrl: item.imageUrl, approvedAmount: item.approvedAmount, id: item.id, status: item.status })}
+                              className="flex-1 py-2 text-xs font-semibold bg-slate-100 text-slate-700 rounded-xl flex items-center justify-center gap-1"
+                            >
+                              <ImageIcon size={14} />
+                              Открыть чек
+                            </button>
+                            <button
+                              onClick={() => { setRejectingCheckId(item.id); setRejectComment(''); }}
+                              className="flex-1 py-2 text-xs font-semibold bg-red-500 text-white rounded-xl"
+                            >
+                              Отклонить
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Actions for rejected - view + delete */}
+                    {item.status === 'rejected' && (
+                      <div className="mt-3 pt-3 border-t border-slate-100">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setSelectedCheck({ imageUrl: item.imageUrl, approvedAmount: item.approvedAmount, id: item.id, status: item.status })}
+                            className="flex-1 py-2 text-xs font-semibold bg-slate-100 text-slate-700 rounded-xl flex items-center justify-center gap-1"
+                          >
+                            <ImageIcon size={14} />
+                            Открыть чек
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCheck(item.id, item.imageUrl)}
+                            disabled={deletingCheckId === item.id}
+                            className="flex-1 py-2 text-xs font-semibold bg-red-500 text-white rounded-xl flex items-center justify-center gap-1 disabled:opacity-50"
+                          >
+                            {deletingCheckId === item.id ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                              <Trash2 size={14} />
+                            )}
+                            Удалить
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>

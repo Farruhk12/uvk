@@ -422,6 +422,28 @@ export const updateCheckStatus = async (
   return { success: true };
 };
 
+const getStoragePathFromUrlForDelete = (imageUrl: string): string | null => {
+  const match = imageUrl.match(/\/checks\/([^?]+)/);
+  return match ? match[1] : null;
+};
+
+export const deleteCheck = async (id: string, imageUrl?: string): Promise<ApiResponse> => {
+  const path = imageUrl ? getStoragePathFromUrlForDelete(imageUrl) : null;
+  if (path) {
+    const { error: storageError } = await supabase.storage.from('checks').remove([path]);
+    if (storageError) {
+      console.error('Error deleting check file from storage:', storageError);
+      return { success: false, error: storageError.message };
+    }
+  }
+  const { error } = await supabase.from('checks').delete().eq('id', id);
+  if (error) {
+    console.error('Error deleting check from DB:', error);
+    return { success: false, error: error.message };
+  }
+  return { success: true };
+};
+
 export interface MonthlyClientPayload {
   id?: string | number;
   month: string;
