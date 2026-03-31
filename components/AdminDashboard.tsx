@@ -112,6 +112,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     status?: 'pending' | 'approved' | 'rejected';
   } | null>(null);
   const [checksSubTab, setChecksSubTab] = useState<'pending' | 'approved' | 'rejected'>('pending');
+  const [checksSearch, setChecksSearch] = useState('');
   const [rejectingCheckId, setRejectingCheckId] = useState<string | null>(null);
   const [rejectComment, setRejectComment] = useState('');
   const [deletingCheckId, setDeletingCheckId] = useState<string | null>(null);
@@ -582,8 +583,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   }, [checks, checksOblast, checksGroup, checksEmployee, user.assignedOblasts, user.assignedGroups]);
 
   const filteredChecks = useMemo(() => {
-    return checksFilteredByRegion.filter((c) => c.status === checksSubTab);
-  }, [checksFilteredByRegion, checksSubTab]);
+    const q = checksSearch.trim().toLowerCase();
+    return checksFilteredByRegion.filter((c) => {
+      if (c.status !== checksSubTab) return false;
+      if (!q) return true;
+      return (
+        (c.clientName || '').toLowerCase().includes(q) ||
+        (c.mpName || '').toLowerCase().includes(q)
+      );
+    });
+  }, [checksFilteredByRegion, checksSubTab, checksSearch]);
 
   const checksCounts = useMemo(() => ({
     pending: checksFilteredByRegion.filter((c) => c.status === 'pending').length,
@@ -1626,6 +1635,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                   Отклонённые {checksCounts.rejected > 0 && <span className="ml-1 opacity-80">({checksCounts.rejected})</span>}
                 </button>
               </div>
+            )}
+
+            {checksLoadTriggered && checksMonth && !checksLoading && checks.length > 0 && (
+              <input
+                type="text"
+                value={checksSearch}
+                onChange={(e) => setChecksSearch(e.target.value)}
+                placeholder="Поиск по МП или клиенту..."
+                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand bg-white"
+              />
             )}
 
             {checksLoading ? (
