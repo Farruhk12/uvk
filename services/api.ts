@@ -690,43 +690,7 @@ export const upsertMonthlyClientsPreservingChecks = async (
   const months = [...new Set(rows.map((r) => (r.month || '').trim()).filter(Boolean))];
   if (months.length === 0) return { success: false, error: 'Нет месяца в данных' };
 
-  const payloadKeys = new Set(rows.map((r) => rowKey(r)));
-
-  report(5, 'Проверка существующих данных...');
-  for (let i = 0; i < months.length; i++) {
-    report(5 + (15 * (i + 1)) / months.length, `Обработка месяца ${i + 1}/${months.length}...`);
-
-    const { data: existing, error: fetchError } = await supabase
-      .from('monthly_clients')
-      .select('id, month, mp_name, client')
-      .eq('month', months[i]);
-
-    if (fetchError) {
-      console.error('Error fetching existing monthly_clients:', fetchError);
-      const detail = (fetchError as any).details || (fetchError as any).hint || '';
-      const code = (fetchError as any).code || '';
-      return { success: false, error: `[${code}] ${fetchError.message}${detail ? '\n' + detail : ''}` };
-    }
-
-    const idsToDelete = (existing || [])
-      .filter((r: any) => !payloadKeys.has(rowKey(r)))
-      .map((r: any) => r.id);
-
-    if (idsToDelete.length > 0) {
-      const DELETE_CHUNK = 50;
-      for (let d = 0; d < idsToDelete.length; d += DELETE_CHUNK) {
-        const chunk = idsToDelete.slice(d, d + DELETE_CHUNK);
-        const { error: deleteError } = await supabase
-          .from('monthly_clients')
-          .delete()
-          .in('id', chunk);
-        if (deleteError) {
-          console.error('Error deleting removed rows:', deleteError);
-          return { success: false, error: deleteError.message };
-        }
-      }
-    }
-  }
+  report(5, 'Подготовка данных...');
 
   // Убираем дубликаты по (month, mp_name, client) — оставляем последнюю строку
   const seen = new Set<string>();
