@@ -703,7 +703,9 @@ export const upsertMonthlyClientsPreservingChecks = async (
 
     if (fetchError) {
       console.error('Error fetching existing monthly_clients:', fetchError);
-      return { success: false, error: fetchError.message };
+      const detail = (fetchError as any).details || (fetchError as any).hint || '';
+      const code = (fetchError as any).code || '';
+      return { success: false, error: `[${code}] ${fetchError.message}${detail ? '\n' + detail : ''}` };
     }
 
     const idsToDelete = (existing || [])
@@ -711,13 +713,17 @@ export const upsertMonthlyClientsPreservingChecks = async (
       .map((r: any) => r.id);
 
     if (idsToDelete.length > 0) {
-      const { error: deleteError } = await supabase
-        .from('monthly_clients')
-        .delete()
-        .in('id', idsToDelete);
-      if (deleteError) {
-        console.error('Error deleting removed rows:', deleteError);
-        return { success: false, error: deleteError.message };
+      const DELETE_CHUNK = 50;
+      for (let d = 0; d < idsToDelete.length; d += DELETE_CHUNK) {
+        const chunk = idsToDelete.slice(d, d + DELETE_CHUNK);
+        const { error: deleteError } = await supabase
+          .from('monthly_clients')
+          .delete()
+          .in('id', chunk);
+        if (deleteError) {
+          console.error('Error deleting removed rows:', deleteError);
+          return { success: false, error: deleteError.message };
+        }
       }
     }
   }
