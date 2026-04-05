@@ -110,7 +110,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     approvedAmount?: string;
     id?: string;
     status?: 'pending' | 'approved' | 'rejected';
+    mpName?: string;
+    month?: string;
+    doctorName?: string;
+    clientName?: string;
+    clientType?: string;
   } | null>(null);
+  const [checksSortAlpha, setChecksSortAlpha] = useState(false);
   const [checksSubTab, setChecksSubTab] = useState<'pending' | 'approved' | 'rejected'>('pending');
   const [checksSearch, setChecksSearch] = useState('');
   const [rejectingCheckId, setRejectingCheckId] = useState<string | null>(null);
@@ -584,7 +590,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
 
   const filteredChecks = useMemo(() => {
     const q = checksSearch.trim().toLowerCase();
-    return checksFilteredByRegion.filter((c) => {
+    const filtered = checksFilteredByRegion.filter((c) => {
       if (c.status !== checksSubTab) return false;
       if (!q) return true;
       return (
@@ -592,7 +598,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
         (c.mpName || '').toLowerCase().includes(q)
       );
     });
-  }, [checksFilteredByRegion, checksSubTab, checksSearch]);
+    if (checksSortAlpha) {
+      return [...filtered].sort((a, b) => (a.clientName || '').localeCompare(b.clientName || '', 'ru'));
+    }
+    return filtered;
+  }, [checksFilteredByRegion, checksSubTab, checksSearch, checksSortAlpha]);
 
   const checksCounts = useMemo(() => ({
     pending: checksFilteredByRegion.filter((c) => c.status === 'pending').length,
@@ -1638,13 +1648,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
             )}
 
             {checksLoadTriggered && checksMonth && !checksLoading && checks.length > 0 && (
-              <input
-                type="text"
-                value={checksSearch}
-                onChange={(e) => setChecksSearch(e.target.value)}
-                placeholder="Поиск по МП или клиенту..."
-                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand bg-white"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={checksSearch}
+                  onChange={(e) => setChecksSearch(e.target.value)}
+                  placeholder="Поиск по МП или клиенту..."
+                  className="flex-1 px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand bg-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => setChecksSortAlpha(prev => !prev)}
+                  title={checksSortAlpha ? 'Сортировка: по алфавиту (вкл)' : 'Сортировка: по умолчанию'}
+                  className={`px-3 py-2.5 text-sm font-semibold rounded-xl border transition-all ${
+                    checksSortAlpha
+                      ? 'bg-brand text-white border-brand'
+                      : 'bg-white text-slate-500 border-slate-200 hover:border-brand hover:text-brand'
+                  }`}
+                >
+                  А→Я
+                </button>
+              </div>
             )}
 
             {checksLoading ? (
@@ -1680,7 +1704,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                   >
                     <div className="flex items-start gap-3">
                       <button
-                        onClick={() => setSelectedCheck({ imageUrl: item.imageUrl, approvedAmount: item.approvedAmount, id: item.id, status: item.status })}
+                        onClick={() => setSelectedCheck({ imageUrl: item.imageUrl, approvedAmount: item.approvedAmount, id: item.id, status: item.status, mpName: item.mpName, month: item.month, doctorName: item.doctorName, clientName: item.clientName, clientType: item.clientType })}
                         className="w-16 h-16 rounded-xl overflow-hidden border border-slate-200 flex-shrink-0 bg-slate-50"
                       >
                         <img
@@ -1746,7 +1770,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                         ) : (
                           <div className="flex gap-2">
                             <button
-                              onClick={() => setSelectedCheck({ imageUrl: item.imageUrl, approvedAmount: item.approvedAmount, id: item.id, status: item.status })}
+                              onClick={() => setSelectedCheck({ imageUrl: item.imageUrl, approvedAmount: item.approvedAmount, id: item.id, status: item.status, mpName: item.mpName, month: item.month, doctorName: item.doctorName, clientName: item.clientName, clientType: item.clientType })}
                               className="flex-1 py-2 text-xs font-semibold bg-slate-100 text-slate-700 rounded-xl flex items-center justify-center gap-1"
                             >
                               <ImageIcon size={14} />
@@ -1801,7 +1825,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                         ) : (
                           <div className="flex gap-2">
                             <button
-                              onClick={() => setSelectedCheck({ imageUrl: item.imageUrl, approvedAmount: item.approvedAmount, id: item.id, status: item.status })}
+                              onClick={() => setSelectedCheck({ imageUrl: item.imageUrl, approvedAmount: item.approvedAmount, id: item.id, status: item.status, mpName: item.mpName, month: item.month, doctorName: item.doctorName, clientName: item.clientName, clientType: item.clientType })}
                               className="flex-1 py-2 text-xs font-semibold bg-slate-100 text-slate-700 rounded-xl flex items-center justify-center gap-1"
                             >
                               <ImageIcon size={14} />
@@ -1823,7 +1847,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                       <div className="mt-3 pt-3 border-t border-slate-100">
                         <div className="flex gap-2">
                           <button
-                            onClick={() => setSelectedCheck({ imageUrl: item.imageUrl, approvedAmount: item.approvedAmount, id: item.id, status: item.status })}
+                            onClick={() => setSelectedCheck({ imageUrl: item.imageUrl, approvedAmount: item.approvedAmount, id: item.id, status: item.status, mpName: item.mpName, month: item.month, doctorName: item.doctorName, clientName: item.clientName, clientType: item.clientType })}
                             className="flex-1 py-2 text-xs font-semibold bg-slate-100 text-slate-700 rounded-xl flex items-center justify-center gap-1"
                           >
                             <ImageIcon size={14} />
@@ -2296,6 +2320,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
           approvedAmount={selectedCheck.approvedAmount}
           checkId={selectedCheck.id}
           checkStatus={selectedCheck.status}
+          mpName={selectedCheck.mpName}
+          month={selectedCheck.month}
+          doctorName={selectedCheck.clientName}
+          clientType={selectedCheck.clientType}
           onApprove={async () => {
             if (selectedCheck.id && (await handleUpdateCheckStatus(selectedCheck.id, 'approved'))) {
               setSelectedCheck(null);

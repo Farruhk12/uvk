@@ -104,6 +104,10 @@ export interface CheckWithClient {
   group?: string;
   /** Утверждённая сумма из monthly_clients */
   approvedAmount?: string;
+  /** Тип: УВК или Предоплата */
+  clientType?: string;
+  /** Имя врача (dolzhnost) */
+  doctorName?: string;
 }
 
 /** Пользователь (МП) — тот, кто отправляет чеки. */

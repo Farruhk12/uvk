@@ -6,6 +6,10 @@ interface CheckImageViewerProps {
   approvedAmount?: string;
   checkId?: string;
   checkStatus?: 'pending' | 'approved' | 'rejected';
+  mpName?: string;
+  month?: string;
+  doctorName?: string;
+  clientType?: string;
   onApprove?: () => void | Promise<void>;
   onReject?: (comment: string) => void | Promise<void>;
   onClose: () => void;
@@ -16,6 +20,10 @@ export const CheckImageViewer: React.FC<CheckImageViewerProps> = ({
   approvedAmount,
   checkId,
   checkStatus,
+  mpName,
+  month,
+  doctorName,
+  clientType,
   onApprove,
   onReject,
   onClose
@@ -50,13 +58,25 @@ export const CheckImageViewer: React.FC<CheckImageViewerProps> = ({
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col">
       <div className="flex items-center justify-between px-4 py-3 text-white bg-gradient-to-b from-black/70 to-black/30">
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold">Просмотр чека</span>
-          {approvedAmount && (
-            <span className="text-sm font-medium text-emerald-400 bg-emerald-500/20 px-3 py-1 rounded-lg">
-              Утверждённая сумма: {approvedAmount}
-            </span>
-          )}
+        <div className="flex flex-col gap-1 min-w-0 flex-1 mr-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold">Просмотр чека</span>
+            {approvedAmount && (
+              <span className="text-sm font-medium text-emerald-400 bg-emerald-500/20 px-3 py-1 rounded-lg">
+                Утверждённая сумма: {approvedAmount}
+              </span>
+            )}
+            {clientType && (
+              <span className="text-xs font-semibold text-amber-300 bg-amber-500/20 px-2 py-1 rounded-lg">
+                {clientType}
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-3 text-xs text-white/70">
+            {mpName && <span><span className="text-white/50">МП:</span> <span className="text-white/90 font-medium">{mpName}</span></span>}
+            {month && <span><span className="text-white/50">Месяц:</span> <span className="text-white/90 font-medium">{month}</span></span>}
+            {doctorName && <span><span className="text-white/50">Врач:</span> <span className="text-white/90 font-medium">{doctorName}</span></span>}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button

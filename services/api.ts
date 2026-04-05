@@ -370,7 +370,7 @@ export const fetchChecksForAdmin = async (
   // с лимитом в 1000 строк при двух отдельных запросах
   const { data: checks, error } = await supabase
     .from('checks')
-    .select('*, monthly_clients!inner(month, mp_name, client, oblast, group, approved_amount)')
+    .select('*, monthly_clients!inner(month, mp_name, client, oblast, group, approved_amount, type, dolzhnost)')
     .eq('monthly_clients.month', month);
 
   if (error || !checks) {
@@ -395,7 +395,9 @@ export const fetchChecksForAdmin = async (
       clientName: mc?.client || '',
       oblast: normalize(mc?.oblast ?? ''),
       group: normalize(mc?.group ?? ''),
-      approvedAmount: normalize(mc?.approved_amount ?? '')
+      approvedAmount: normalize(mc?.approved_amount ?? ''),
+      clientType: normalize(mc?.type ?? ''),
+      doctorName: normalize(mc?.dolzhnost ?? '')
     };
   });
 };
