@@ -1,0 +1,7 @@
+{
+  "name": "Check-MP System",
+  "description": "A modern mobile web application for medical representatives to manage clients and upload check receipts.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
