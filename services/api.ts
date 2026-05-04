@@ -237,6 +237,8 @@ export const fetchClients = async (mpName: string, month: string): Promise<Clien
 
     const checkStatus = lastCheck?.status ?? undefined;
     const checkComment = lastCheck?.admin_comment ?? undefined;
+    const checkId = lastCheck?.id != null ? String(lastCheck.id) : undefined;
+    const checkImageUrl = lastCheck?.image_url ? String(lastCheck.image_url) : undefined;
 
     const excelStatus = normalize((row as any).excel_status || '');
     const status =
@@ -253,7 +255,9 @@ export const fetchClients = async (mpName: string, month: string): Promise<Clien
       oblast: normalize(row.oblast),
       status,
       checkStatus,
-      checkComment
+      checkComment,
+      checkId,
+      checkImageUrl
     };
 
     return client;
@@ -539,6 +543,8 @@ export const fetchMonthlyClientsByMonth = async (month: string): Promise<Client[
       )[checksForClient.length - 1];
       const checkStatus = lastCheck?.status ?? undefined;
       const checkComment = lastCheck?.admin_comment ?? undefined;
+      const checkId = lastCheck?.id != null ? String(lastCheck.id) : undefined;
+      const checkImageUrl = lastCheck?.image_url ? String(lastCheck.image_url) : undefined;
 
       const excelStatus = normalize(r.excel_status || '');
       const status =
@@ -556,6 +562,8 @@ export const fetchMonthlyClientsByMonth = async (month: string): Promise<Client[
         status,
         checkStatus,
         checkComment,
+        checkId,
+        checkImageUrl,
         month: normalize(r.month),
         mpName: normalize(r.mp_name),
         date: normalize(r.date),

@@ -555,6 +555,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
           : c
       )
     );
+    setDbClients((prev) =>
+      prev.map((r) =>
+        r.checkId === id
+          ? {
+              ...r,
+              checkStatus: status,
+              checkComment: status === 'approved' ? null : comment || r.checkComment
+            }
+          : r
+      )
+    );
     setRejectingCheckId(null);
     setRejectComment('');
     return true;
@@ -570,6 +581,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
         return;
       }
       setChecks((prev) => prev.filter((c) => c.id !== id));
+      if (dbMonth) {
+        try {
+          const rows = await fetchMonthlyClientsByMonth(dbMonth);
+          setDbClients(rows);
+        } catch (e) {
+          console.error('Failed to refresh database tab after check delete:', e);
+        }
+      }
     } finally {
       setDeletingCheckId(null);
     }
@@ -1854,6 +1873,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                             Открыть чек
                           </button>
                           <button
+                            onClick={() => handleUpdateCheckStatus(item.id, 'approved')}
+                            className="flex-1 py-2 text-xs font-semibold bg-emerald-500 text-white rounded-xl"
+                          >
+                            Принять
+                          </button>
+                          <button
                             onClick={() => handleDeleteCheck(item.id, item.imageUrl)}
                             disabled={deletingCheckId === item.id}
                             className="flex-1 py-2 text-xs font-semibold bg-red-500 text-white rounded-xl flex items-center justify-center gap-1 disabled:opacity-50"
@@ -2051,6 +2076,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                         <th className="px-2 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Сумма Выдачи</th>
                         <th className="px-2 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Утв Сумма</th>
                         <th className="px-2 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Факт. сумма</th>
+                        <th className="px-2 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap text-center">Чек</th>
                         <th className="px-2 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider w-12 text-center">—</th>
                       </tr>
                     </thead>
@@ -2080,6 +2106,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                           <td className="px-2 py-2 text-sm text-slate-600 whitespace-nowrap">{row.amountIssued && String(row.amountIssued).trim() ? row.amountIssued : '—'}</td>
                           <td className="px-2 py-2 text-sm text-slate-600 whitespace-nowrap">{row.approvedAmount && String(row.approvedAmount).trim() ? row.approvedAmount : '—'}</td>
                           <td className="px-2 py-2 text-sm text-slate-600 whitespace-nowrap">{row.actualAmount && String(row.actualAmount).trim() ? row.actualAmount : '—'}</td>
+                          <td className="px-2 py-2 text-center whitespace-nowrap">
+                            {row.checkImageUrl && row.checkId ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setSelectedCheck({
+                                    imageUrl: row.checkImageUrl!,
+                                    approvedAmount: row.approvedAmount,
+                                    id: row.checkId,
+                                    status: row.checkStatus,
+                                    mpName: row.mpName,
+                                    month: row.month,
+                                    doctorName: row.dolzhnost,
+                                    clientName: row.client,
+                                    clientType: row.type
+                                  })
+                                }
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-slate-100 text-slate-700 rounded-lg hover:bg-brand/10 hover:text-brand border border-slate-200"
+                              >
+                                <ImageIcon size={14} />
+                                Показать чек
+                              </button>
+                            ) : (
+                              <span className="text-xs text-slate-300">—</span>
+                            )}
+                          </td>
                           <td className="px-2 py-2 text-center">
                             <button
                               onClick={() => handleDeleteDbClient(row)}

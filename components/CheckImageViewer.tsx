@@ -41,7 +41,8 @@ export const CheckImageViewer: React.FC<CheckImageViewerProps> = ({
 
   const toggleFullscreen = () => setIsFullscreen((prev) => !prev);
 
-  const canAct = checkId && checkStatus === 'pending' && (onApprove || onReject);
+  const canActPending = checkId && checkStatus === 'pending' && (onApprove || onReject);
+  const canReacceptRejected = checkId && checkStatus === 'rejected' && onApprove;
 
   const handleApprove = async () => {
     if (onApprove) await onApprove();
@@ -134,7 +135,7 @@ export const CheckImageViewer: React.FC<CheckImageViewerProps> = ({
           />
         </div>
 
-        {canAct && (
+        {canActPending && (
           <div className="w-full max-w-3xl px-4 py-3 border-t border-white/10">
             {showRejectForm ? (
               <div className="space-y-2 animate-in slide-in-from-bottom-2 duration-200">
@@ -180,6 +181,19 @@ export const CheckImageViewer: React.FC<CheckImageViewerProps> = ({
                 </button>
               </div>
             )}
+          </div>
+        )}
+        {canReacceptRejected && (
+          <div className="w-full max-w-3xl px-4 py-3 border-t border-white/10">
+            <p className="text-xs text-white/60 mb-2 text-center">Чек был отклонён — можно принять, если отклонение было ошибкой.</p>
+            <button
+              type="button"
+              onClick={handleApprove}
+              className="w-full py-2.5 text-sm font-semibold bg-emerald-500 text-white rounded-xl flex items-center justify-center gap-1.5 hover:bg-emerald-600"
+            >
+              <CheckCircle size={18} />
+              Принять чек
+            </button>
           </div>
         )}
       </div>

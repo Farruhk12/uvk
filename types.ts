@@ -20,6 +20,10 @@ export interface Client {
    * Комментарий администратора по последнему чеку.
    */
   checkComment?: string | null;
+  /** ID последнего чека (для просмотра из админки / базы Excel). */
+  checkId?: string;
+  /** Публичный URL изображения последнего чека. */
+  checkImageUrl?: string;
   /** Для админки: месяц и имя МП из monthly_clients */
   month?: string;
   mpName?: string;
