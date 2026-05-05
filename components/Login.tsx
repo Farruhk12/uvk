@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { loginUser } from '../services/api';
+import { loginUser, normalizeCredentialInput } from '../services/api';
 import { User } from '../types';
 import { Loader2, KeyRound, User as UserIcon, LogIn, ShieldCheck } from 'lucide-react';
 
@@ -15,7 +15,9 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!login || !pass) {
+    const loginFilled = normalizeCredentialInput(login);
+    const passFilled = normalizeCredentialInput(pass);
+    if (!loginFilled || !passFilled) {
       setError('Заполните все поля');
       return;
     }

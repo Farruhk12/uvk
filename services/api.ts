@@ -16,6 +16,16 @@ const supabase = getSupabaseClient();
 const normalize = (value: unknown): string =>
   typeof value === 'string' ? value.trim() : value == null ? '' : String(value).trim();
 
+/** Обрезает пробелы и типичные «невидимые» символы при вводе с телефона (NBSP и т.п.). */
+export const normalizeCredentialInput = (value: string): string =>
+  value
+    .replace(/\uFEFF/g, '')
+    .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ')
+    .trim();
+
+const passwordsMatch = (stored: string, input: string): boolean =>
+  normalizeCredentialInput(stored).toLowerCase() === normalizeCredentialInput(input).toLowerCase();
+
 export const fetchManagers = async (): Promise<ManagerProfile[]> => {
   try {
     const { data, error } = await supabase
@@ -103,12 +113,19 @@ export const deleteManagerApi = async (id: string): Promise<ApiResponse> => {
 };
 
 export const loginUser = async (login: string, pass: string): Promise<User> => {
-  const trimmedLogin = login.trim();
-  const cleanLogin = trimmedLogin.toLowerCase();
-  const cleanPass = pass.trim();
+  const cleanLogin = normalizeCredentialInput(login).toLowerCase();
+  const cleanPass = normalizeCredentialInput(pass);
+
+  if (!cleanLogin || !cleanPass) {
+    return {
+      success: false,
+      mpName: '',
+      error: 'Заполните все поля'
+    };
+  }
 
   // 1. Check Hardcoded Admin (Always works)
-  if (cleanLogin === 'фаррух' && cleanPass === '900') {
+  if (cleanLogin === 'фаррух' && passwordsMatch('900', cleanPass)) {
     return {
       success: true,
       mpName: 'Фаррух',
@@ -116,16 +133,23 @@ export const loginUser = async (login: string, pass: string): Promise<User> => {
     };
   }
 
-  // 2. Check Managers (Supabase) — ilike для регистронезависимого логина (Мам/мам)
+  // 2. Check Managers (Supabase) — ilike для регистронезависимого логина; пароль без учёта регистра
   try {
     const { data, error } = await supabase
       .from('managers')
       .select('*')
       .ilike('login', cleanLogin)
-      .eq('pass', cleanPass)
       .maybeSingle();
 
     if (!error && data) {
+      if (!passwordsMatch(String(data.pass ?? ''), cleanPass)) {
+        return {
+          success: false,
+          mpName: '',
+          error: 'Неверный логин или пароль'
+        };
+      }
+
       const role: 'admin' | 'manager' = (data.role === 'admin' ? 'admin' : 'manager') as
         | 'admin'
         | 'manager';
@@ -155,7 +179,6 @@ export const loginUser = async (login: string, pass: string): Promise<User> => {
       .from('users')
       .select('*')
       .ilike('login', cleanLogin)
-      .eq('pass', cleanPass)
       .maybeSingle();
 
     if (error) {
@@ -168,6 +191,14 @@ export const loginUser = async (login: string, pass: string): Promise<User> => {
     }
 
     if (data) {
+      if (!passwordsMatch(String(data.pass ?? ''), cleanPass)) {
+        return {
+          success: false,
+          mpName: '',
+          error: 'Неверный логин или пароль'
+        };
+      }
+
       return {
         success: true,
         mpName: normalize(data.mp_name),
