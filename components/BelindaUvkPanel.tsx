@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw, Loader2, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight, ListFilter, Send, X } from 'lucide-react';
 import {
   previewBelindaUvk,
@@ -17,6 +17,42 @@ import { BelindaPreviewRow, BelindaUvkScanResult, BelindaUvkFilters } from '../t
  *    существующие чеки не отвязываются. Пишет напрямую в боевую monthly_clients — то,
  *    что сразу видят МП в личном кабинете.
  */
+
+/** Чекбокс с поддержкой промежуточного состояния (выбрано частично). */
+const TriCheckbox: React.FC<{
+  checked: boolean;
+  indeterminate: boolean;
+  onChange: () => void;
+  title?: string;
+  disabled?: boolean;
+}> = ({ checked, indeterminate, onChange, title, disabled }) => {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={checked}
+      disabled={disabled}
+      onChange={onChange}
+      onClick={(e) => e.stopPropagation()}
+      title={title}
+      className="w-4 h-4 rounded border-slate-300 text-brand focus:ring-brand/30 cursor-pointer shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
+    />
+  );
+};
+
+/** Определяет состояние выбора для набора ключей строк. */
+const selectionStateOf = (keys: string[], selected: Set<string>): 'all' | 'none' | 'partial' => {
+  if (keys.length === 0) return 'none';
+  let count = 0;
+  for (const k of keys) if (selected.has(k)) count++;
+  if (count === 0) return 'none';
+  if (count === keys.length) return 'all';
+  return 'partial';
+};
 
 /** Общий вид строки для группировки — и staging, и предпросмотр приводятся к нему. */
 interface DisplayRow {
@@ -84,6 +120,13 @@ const previewRowToMonthlyClientPayload = (r: BelindaPreviewRow): MonthlyClientPa
   approved_amount: r.approved_amount,
   actual_amount: r.actual_amount
 });
+
+/** Правило отправки в базу: строка без заполненной или нулевой утверждённой суммы не отправляется. */
+const isApprovedPreviewRow = (r: BelindaPreviewRow): boolean => {
+  if (r.approved_amount === '' || r.approved_amount == null) return false;
+  const n = Number(r.approved_amount);
+  return Number.isFinite(n) && n !== 0;
+};
 
 /** Строка считается «утверждённой», если approvedAmount заполнен и не равен нулю. */
 const isApprovedRow = (r: DisplayRow): boolean => {
@@ -232,7 +275,13 @@ const StatBadge: React.FC<{ approvedCount: number; total: number; approvedSum: n
 };
 
 /** Область → Группа → МП → Тип документа → таблица клиентов, всё сворачиваемо. */
-const GroupedRowsAccordion: React.FC<{ rows: DisplayRow[]; emptyText: string }> = ({ rows, emptyText }) => {
+const GroupedRowsAccordion: React.FC<{
+  rows: DisplayRow[];
+  emptyText: string;
+  selectedKeys?: Set<string>;
+  onToggleKeys?: (keys: string[], checked: boolean) => void;
+}> = ({ rows, emptyText, selectedKeys, onToggleKeys }) => {
+  const selectable = !!selectedKeys && !!onToggleKeys;
   const [openOblast, setOpenOblast] = useState<string | null>(null);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [openMp, setOpenMp] = useState<string | null>(null);
@@ -264,6 +313,9 @@ const GroupedRowsAccordion: React.FC<{ rows: DisplayRow[]; emptyText: string }> 
       return { total: rowsArr.length, approvedCount, approvedSum };
     };
 
+    // Только строки с утверждённой суммой можно выбрать для отправки в базу.
+    const keysOf = (rowsArr: DisplayRow[]) => rowsArr.filter(isApprovedRow).map((r) => r.key);
+
     return Array.from(byOblast.entries())
       .sort((a, b) => a[0].localeCompare(b[0], 'ru'))
       .map(([oblast, byGroup]) => {
@@ -271,6 +323,7 @@ const GroupedRowsAccordion: React.FC<{ rows: DisplayRow[]; emptyText: string }> 
         return {
           oblast,
           ...statsOf(oblastRows),
+          keys: keysOf(oblastRows),
           groups: Array.from(byGroup.entries())
             .sort((a, b) => a[0].localeCompare(b[0], 'ru'))
             .map(([group, byMp]) => {
@@ -278,6 +331,7 @@ const GroupedRowsAccordion: React.FC<{ rows: DisplayRow[]; emptyText: string }> 
               return {
                 group,
                 ...statsOf(groupRows),
+                keys: keysOf(groupRows),
                 mps: Array.from(byMp.entries())
                   .sort((a, b) => a[0].localeCompare(b[0], 'ru'))
                   .map(([mp, byDoctype]) => {
@@ -285,9 +339,10 @@ const GroupedRowsAccordion: React.FC<{ rows: DisplayRow[]; emptyText: string }> 
                     return {
                       mp,
                       ...statsOf(allMpRows),
+                      keys: keysOf(allMpRows),
                       doctypes: Array.from(byDoctype.entries())
                         .sort((a, b) => a[0].localeCompare(b[0], 'ru'))
-                        .map(([doctype, r]) => ({ doctype, rows: r }))
+                        .map(([doctype, r]) => ({ doctype, rows: r, keys: keysOf(r) }))
                     };
                   })
               };
@@ -307,9 +362,10 @@ const GroupedRowsAccordion: React.FC<{ rows: DisplayRow[]; emptyText: string }> 
   return (
     <>
     <div className="divide-y-2 divide-slate-200">
-      {grouped.map(({ oblast, total, approvedCount, approvedSum, groups }) => {
+      {grouped.map(({ oblast, total, approvedCount, approvedSum, groups, keys: oblastKeys }) => {
         const isOblastOpen = openOblast === oblast;
         const oblastMismatches = allMismatches.filter((m) => m.actualOblast === oblast);
+        const oblastSelState = selectable ? selectionStateOf(oblastKeys, selectedKeys!) : 'none';
         return (
           <div key={oblast} className="bg-white">
             <button
@@ -322,7 +378,17 @@ const GroupedRowsAccordion: React.FC<{ rows: DisplayRow[]; emptyText: string }> 
               }}
               className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 text-left gap-2"
             >
-              <span className="text-sm font-bold text-slate-800 truncate">{oblast}</span>
+              <span className="flex items-center gap-2 min-w-0">
+                {selectable && (
+                  <TriCheckbox
+                    checked={oblastSelState === 'all'}
+                    indeterminate={oblastSelState === 'partial'}
+                    onChange={() => onToggleKeys!(oblastKeys, oblastSelState !== 'all')}
+                    title="Выбрать всю область"
+                  />
+                )}
+                <span className="text-sm font-bold text-slate-800 truncate">{oblast}</span>
+              </span>
               <div className="flex items-center gap-2 shrink-0">
                 {oblastMismatches.length > 0 && (
                   <MismatchIcon
@@ -336,10 +402,11 @@ const GroupedRowsAccordion: React.FC<{ rows: DisplayRow[]; emptyText: string }> 
             </button>
             {isOblastOpen && (
               <div className="pb-2 pl-3 bg-slate-50/60 divide-y divide-slate-200">
-                {groups.map(({ group, total: groupTotal, approvedCount: groupApproved, approvedSum: groupSum, mps }) => {
+                {groups.map(({ group, total: groupTotal, approvedCount: groupApproved, approvedSum: groupSum, mps, keys: groupKeysArr }) => {
                   const groupKey = `${oblast}||${group}`;
                   const isGroupOpen = openGroup === groupKey;
                   const groupMismatches = oblastMismatches.filter((m) => m.group === group);
+                  const groupSelState = selectable ? selectionStateOf(groupKeysArr, selectedKeys!) : 'none';
                   return (
                     <div key={groupKey} className="border-l-4 border-slate-200">
                       <button
@@ -351,7 +418,17 @@ const GroupedRowsAccordion: React.FC<{ rows: DisplayRow[]; emptyText: string }> 
                         }}
                         className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white text-left gap-2"
                       >
-                        <span className="text-sm font-semibold text-slate-700 truncate">{group}</span>
+                        <span className="flex items-center gap-2 min-w-0">
+                          {selectable && (
+                            <TriCheckbox
+                              checked={groupSelState === 'all'}
+                              indeterminate={groupSelState === 'partial'}
+                              onChange={() => onToggleKeys!(groupKeysArr, groupSelState !== 'all')}
+                              title="Выбрать всю группу"
+                            />
+                          )}
+                          <span className="text-sm font-semibold text-slate-700 truncate">{group}</span>
+                        </span>
                         <div className="flex items-center gap-2 shrink-0">
                           {groupMismatches.length > 0 && (
                             <MismatchIcon
@@ -369,10 +446,11 @@ const GroupedRowsAccordion: React.FC<{ rows: DisplayRow[]; emptyText: string }> 
                       </button>
                       {isGroupOpen && (
                         <div className="pb-1 pl-3 bg-white divide-y divide-slate-100">
-                          {mps.map(({ mp, total: mpTotal, approvedCount, approvedSum, doctypes }) => {
+                          {mps.map(({ mp, total: mpTotal, approvedCount, approvedSum, doctypes, keys: mpKeysArr }) => {
                             const mpKey = `${groupKey}||${mp}`;
                             const isMpOpen = openMp === mpKey;
                             const mpMismatches = groupMismatches.filter((m) => m.mp === mp);
+                            const mpSelState = selectable ? selectionStateOf(mpKeysArr, selectedKeys!) : 'none';
                             return (
                               <div key={mpKey} className="border-l-4 border-slate-100">
                                 <button
@@ -383,7 +461,17 @@ const GroupedRowsAccordion: React.FC<{ rows: DisplayRow[]; emptyText: string }> 
                                   }}
                                   className="w-full flex items-center justify-between px-4 py-2 hover:bg-slate-50 text-left gap-2"
                                 >
-                                  <span className="text-sm font-medium text-slate-600 truncate">{mp}</span>
+                                  <span className="flex items-center gap-2 min-w-0">
+                                    {selectable && (
+                                      <TriCheckbox
+                                        checked={mpSelState === 'all'}
+                                        indeterminate={mpSelState === 'partial'}
+                                        onChange={() => onToggleKeys!(mpKeysArr, mpSelState !== 'all')}
+                                        title="Выбрать все строки сотрудника"
+                                      />
+                                    )}
+                                    <span className="text-sm font-medium text-slate-600 truncate">{mp}</span>
+                                  </span>
                                   <div className="flex items-center gap-2 shrink-0">
                                     {mpMismatches.length > 0 && (
                                       <MismatchIcon
@@ -401,18 +489,29 @@ const GroupedRowsAccordion: React.FC<{ rows: DisplayRow[]; emptyText: string }> 
                                 </button>
                                 {isMpOpen && (
                                   <div className="pb-1 pl-3 bg-slate-50/40">
-                                    {doctypes.map(({ doctype, rows: leafRows }) => {
+                                    {doctypes.map(({ doctype, rows: leafRows, keys: doctypeKeysArr }) => {
                                       const doctypeKey = `${mpKey}||${doctype}`;
                                       const isDoctypeOpen = openDoctype === doctypeKey;
+                                      const doctypeSelState = selectable ? selectionStateOf(doctypeKeysArr, selectedKeys!) : 'none';
                                       return (
                                         <div key={doctypeKey} className="border-l-2 border-slate-100">
                                           <button
                                             type="button"
                                             onClick={() => setOpenDoctype(isDoctypeOpen ? null : doctypeKey)}
-                                            className="w-full flex items-center justify-between px-4 py-2 hover:bg-slate-50 text-left"
+                                            className="w-full flex items-center justify-between px-4 py-2 hover:bg-slate-50 text-left gap-2"
                                           >
-                                            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                                              {doctype} <span className="text-slate-400 font-normal normal-case">({leafRows.length})</span>
+                                            <span className="flex items-center gap-2 min-w-0">
+                                              {selectable && (
+                                                <TriCheckbox
+                                                  checked={doctypeSelState === 'all'}
+                                                  indeterminate={doctypeSelState === 'partial'}
+                                                  onChange={() => onToggleKeys!(doctypeKeysArr, doctypeSelState !== 'all')}
+                                                  title="Выбрать все строки этого типа"
+                                                />
+                                              )}
+                                              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                                {doctype} <span className="text-slate-400 font-normal normal-case">({leafRows.length})</span>
+                                              </span>
                                             </span>
                                             {isDoctypeOpen ? (
                                               <ChevronDown size={14} className="text-slate-400" />
@@ -425,6 +524,7 @@ const GroupedRowsAccordion: React.FC<{ rows: DisplayRow[]; emptyText: string }> 
                                               <table className="w-full text-left border-collapse min-w-[1900px]">
                                                 <thead>
                                                   <tr className="bg-slate-50 border-b border-slate-200">
+                                                    {selectable && <th className="px-2 py-2 w-8"></th>}
                                                     <th className="px-2 py-2 text-xs font-bold text-slate-500 uppercase">Дата</th>
                                                     <th className="px-2 py-2 text-xs font-bold text-slate-500 uppercase">Месяц</th>
                                                     <th className="px-2 py-2 text-xs font-bold text-slate-500 uppercase">Тип документа</th>
@@ -446,8 +546,21 @@ const GroupedRowsAccordion: React.FC<{ rows: DisplayRow[]; emptyText: string }> 
                                                   </tr>
                                                 </thead>
                                                 <tbody>
-                                                  {leafRows.map((r) => (
-                                                    <tr key={r.key} className="border-b border-slate-100 hover:bg-slate-50/50">
+                                                  {leafRows.map((r) => {
+                                                    const rowApproved = isApprovedRow(r);
+                                                    return (
+                                                    <tr key={r.key} className={`border-b border-slate-100 hover:bg-slate-50/50 ${!rowApproved ? 'opacity-50' : ''}`}>
+                                                      {selectable && (
+                                                        <td className="px-2 py-2">
+                                                          <TriCheckbox
+                                                            checked={rowApproved && selectedKeys!.has(r.key)}
+                                                            indeterminate={false}
+                                                            disabled={!rowApproved}
+                                                            onChange={() => onToggleKeys!([r.key], !selectedKeys!.has(r.key))}
+                                                            title={!rowApproved ? 'Нет утверждённой суммы — не может быть отправлено' : undefined}
+                                                          />
+                                                        </td>
+                                                      )}
                                                       <td className="px-2 py-2 text-sm text-slate-600 whitespace-nowrap">{r.date}</td>
                                                       <td className="px-2 py-2 text-sm text-slate-600 whitespace-nowrap">{r.month}</td>
                                                       <td className="px-2 py-2 text-sm text-slate-600">{r.type}</td>
@@ -467,7 +580,8 @@ const GroupedRowsAccordion: React.FC<{ rows: DisplayRow[]; emptyText: string }> 
                                                       <td className="px-2 py-2 text-sm text-slate-600">{r.approvedAmount}</td>
                                                       <td className="px-2 py-2 text-sm text-slate-600">{r.actualAmount}</td>
                                                     </tr>
-                                                  ))}
+                                                    );
+                                                  })}
                                                 </tbody>
                                               </table>
                                             </div>
@@ -511,6 +625,15 @@ export const BelindaUvkPanel: React.FC = () => {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewRows, setPreviewRows] = useState<BelindaPreviewRow[]>([]);
   const [previewIssues, setPreviewIssues] = useState<{ id?: string; message: string }[]>([]);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+
+  const toggleKeys = useCallback((keys: string[], checked: boolean) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      keys.forEach((k) => (checked ? next.add(k) : next.delete(k)));
+      return next;
+    });
+  }, []);
 
   const [committing, setCommitting] = useState(false);
   const [commitProgress, setCommitProgress] = useState<{ pct: number; status: string } | null>(null);
@@ -578,20 +701,35 @@ export const BelindaUvkPanel: React.FC = () => {
         setPreviewError(res.error || 'Не удалось получить предпросмотр');
         setPreviewRows([]);
         setPreviewIssues([]);
+        setSelectedKeys(new Set());
         return;
       }
-      setPreviewRows(res.rows || []);
+      const rows = res.rows || [];
+      setPreviewRows(rows);
       setPreviewIssues(res.errors || []);
+      // По умолчанию выбраны только строки с утверждённой суммой — без неё в базу не отправляем.
+      setSelectedKeys(new Set(rows.filter(isApprovedPreviewRow).map((r) => `${r.source_doc_id}|${r.item_index}`)));
     } finally {
       setPreviewLoading(false);
     }
   };
 
+  const approvedPreviewRows = useMemo(() => previewRows.filter(isApprovedPreviewRow), [previewRows]);
+  const unapprovedCount = previewRows.length - approvedPreviewRows.length;
+
+  const selectedRows = useMemo(
+    () => approvedPreviewRows.filter((r) => selectedKeys.has(`${r.source_doc_id}|${r.item_index}`)),
+    [approvedPreviewRows, selectedKeys]
+  );
+
+  const handleSelectAll = () => setSelectedKeys(new Set(approvedPreviewRows.map((r) => `${r.source_doc_id}|${r.item_index}`)));
+  const handleSelectNone = () => setSelectedKeys(new Set());
+
   const handleCommit = async () => {
-    if (previewRows.length === 0) return;
+    if (selectedRows.length === 0) return;
     if (
       !window.confirm(
-        `Отправить ${previewRows.length} строк в ОСНОВНУЮ базу (monthly_clients)? Это то, что сразу увидят МП в своём личном кабинете. Существующие чеки сохранятся.`
+        `Отправить ${selectedRows.length} строк в ОСНОВНУЮ базу (monthly_clients)? Это то, что сразу увидят МП в своём личном кабинете. Существующие чеки сохранятся.`
       )
     )
       return;
@@ -601,7 +739,9 @@ export const BelindaUvkPanel: React.FC = () => {
     setCommitSuccessCount(null);
     setCommitProgress(null);
     try {
-      const payload: MonthlyClientPayload[] = previewRows.map(previewRowToMonthlyClientPayload);
+      // Строки без утверждённой суммы не отправляем — правило проверяется ещё раз здесь,
+      // даже если чекбокс для них где-то оказался бы включён.
+      const payload: MonthlyClientPayload[] = selectedRows.filter(isApprovedPreviewRow).map(previewRowToMonthlyClientPayload);
       const res = await upsertMonthlyClientsPreservingChecks(payload, (pct, status) => {
         setCommitProgress({ pct, status });
       });
@@ -613,6 +753,7 @@ export const BelindaUvkPanel: React.FC = () => {
       setCommitSuccessCount(payload.length);
       setPreviewRows([]);
       setPreviewIssues([]);
+      setSelectedKeys(new Set());
     } finally {
       setCommitting(false);
       setCommitProgress(null);
@@ -700,22 +841,43 @@ export const BelindaUvkPanel: React.FC = () => {
 
         {previewRows.length > 0 && (
           <>
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm flex items-center justify-between">
-              <span className="text-slate-700">
-                Найдено строк: <strong>{previewRows.length}</strong>
-                {previewIssues.length > 0 && (
-                  <span className="text-red-600"> · пропущено с ошибкой: {previewIssues.length}</span>
-                )}
-              </span>
-              <button
-                type="button"
-                onClick={handleCommit}
-                disabled={committing}
-                className="flex items-center gap-2 px-3 py-2 bg-brand text-white rounded-lg text-sm font-semibold disabled:opacity-50"
-              >
-                {committing ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                {committing ? 'Отправка...' : 'Отправить в базу'}
-              </button>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm space-y-2">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="text-slate-700">
+                  Найдено строк: <strong>{previewRows.length}</strong> · выбрано: <strong>{selectedRows.length}</strong>
+                  {unapprovedCount > 0 && (
+                    <span className="text-slate-400"> · без утверждённой суммы (не отправятся): {unapprovedCount}</span>
+                  )}
+                  {previewIssues.length > 0 && (
+                    <span className="text-red-600"> · пропущено с ошибкой: {previewIssues.length}</span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCommit}
+                  disabled={committing || selectedRows.length === 0}
+                  className="flex items-center gap-2 px-3 py-2 bg-brand text-white rounded-lg text-sm font-semibold disabled:opacity-50"
+                >
+                  {committing ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                  {committing ? 'Отправка...' : `Отправить в базу (${selectedRows.length})`}
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleSelectAll}
+                  className="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-600 bg-white border border-slate-200 hover:border-brand/50"
+                >
+                  Выбрать всё
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSelectNone}
+                  className="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-600 bg-white border border-slate-200 hover:border-brand/50"
+                >
+                  Снять всё
+                </button>
+              </div>
             </div>
             {previewIssues.length > 0 && (
               <div className="space-y-1">
@@ -730,7 +892,12 @@ export const BelindaUvkPanel: React.FC = () => {
               </div>
             )}
             <div className="border border-slate-200 rounded-2xl overflow-hidden">
-              <GroupedRowsAccordion rows={previewDisplayRows} emptyText="Нет данных" />
+              <GroupedRowsAccordion
+                rows={previewDisplayRows}
+                emptyText="Нет данных"
+                selectedKeys={selectedKeys}
+                onToggleKeys={toggleKeys}
+              />
             </div>
           </>
         )}
