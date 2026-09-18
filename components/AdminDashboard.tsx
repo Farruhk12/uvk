@@ -47,9 +47,11 @@ import {
   MessageCircle,
   Send,
   Search,
-  HardDrive
+  HardDrive,
+  Link2
 } from 'lucide-react';
 import { CheckImageViewer } from './CheckImageViewer';
+import { BelindaUvkPanel } from './BelindaUvkPanel';
 
 interface AdminDashboardProps {
   user: User;
@@ -65,7 +67,7 @@ interface MonitoringStat {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'monitoring' | 'managers' | 'checks' | 'database' | 'users'>(
+  const [activeTab, setActiveTab] = useState<'monitoring' | 'managers' | 'checks' | 'database' | 'users' | 'belinda'>(
     'monitoring'
   );
   const [managers, setManagers] = useState<ManagerProfile[]>([]);
@@ -200,7 +202,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     { id: 'checks', label: 'Чеки' },
     { id: 'database', label: 'База' },
     { id: 'managers', label: 'Команда' },
-    { id: 'users', label: 'Пользователи' }
+    { id: 'users', label: 'Пользователи' },
+    { id: 'belinda', label: 'Belinda (тест)' }
   ];
 
   const openCreateModal = () => {
@@ -313,7 +316,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
 
   const monthOptions = useMemo(() => getMonthOptions(), []);
 
-  const ALL_SECTIONS: SectionId[] = ['monitoring', 'checks', 'database', 'managers', 'users'];
+  const ALL_SECTIONS: SectionId[] = ['monitoring', 'checks', 'database', 'managers', 'users', 'belinda'];
   const visibleTabs = useMemo((): SectionId[] => {
     const sections = user.assignedSections;
     if (sections && sections.length > 0) return sections;
@@ -1245,6 +1248,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
           >
             <UserCog size={16} />
             Пользователи
+          </button>
+          )}
+          {visibleTabs.includes('belinda') && (
+          <button
+            onClick={() => setActiveTab('belinda')}
+            className={`flex-1 py-2.5 text-sm font-medium rounded-lg flex items-center justify-center gap-2 transition-all ${
+              activeTab === 'belinda'
+                ? 'bg-brand text-white shadow-lg shadow-brand/25'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Link2 size={16} />
+            Belinda
           </button>
           )}
         </div>
@@ -2364,6 +2380,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
             )}
           </div>
         )}
+
+        {/* === BELINDA (1С УВК, тест) TAB === */}
+        {activeTab === 'belinda' && user.role === 'admin' && <BelindaUvkPanel />}
       </div>
 
       {selectedCheck && (

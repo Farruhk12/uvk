@@ -39,8 +39,8 @@ export interface Client {
   actualAmount?: string;
 }
 
-/** ID раздела панели: monitoring, checks, database, managers, users */
-export type SectionId = 'monitoring' | 'checks' | 'database' | 'managers' | 'users';
+/** ID раздела панели: monitoring, checks, database, managers, users, belinda (тест интеграции 1С) */
+export type SectionId = 'monitoring' | 'checks' | 'database' | 'managers' | 'users' | 'belinda';
 
 export interface User {
   success: boolean;
@@ -122,4 +122,85 @@ export interface MpUser {
   mp_name: string;
   oblast: string;
   group: string;
+}
+
+/**
+ * Строка тестовой staging-таблицы belinda_monthly_clients_staging — та же форма,
+ * что и monthly_clients (которую сейчас заполняет Excel), чтобы после проверки
+ * данные можно было перенести в прод тем же способом.
+ */
+export interface BelindaStagingRow {
+  id: number;
+  month: string;
+  mpName: string;
+  client: string;
+  type: string;
+  spec: string;
+  ab: string;
+  group: string;
+  lpu: string;
+  oblast: string;
+  date: string;
+  articul: string;
+  region: string;
+  objectType: string;
+  orientir: string;
+  dolzhnost: string;
+  amountIssued: string;
+  approvedAmount: string;
+  actualAmount: string;
+  sourceDocId: string;
+  syncedAt: string;
+}
+
+/** Доступные значения для фильтров УВК (результат "сканирования" get_uvk без записи в БД). */
+export interface BelindaUvkScanResult {
+  total: number;
+  /** Стандартизованные "Месяц ГГГГ" — вычислены из поля date, а не из грязного поля 1С month. */
+  months: string[];
+  doctypes: string[];
+}
+
+/** Фильтры для предпросмотра/синхронизации УВК. */
+export interface BelindaUvkFilters {
+  months?: string[];
+  doctypes?: string[];
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+/**
+ * Строка предпросмотра (результат mode=preview) — ещё НЕ записана в БД.
+ * Отправляется обратно в mode=commit как есть, чтобы попасть в staging-таблицу.
+ */
+export interface BelindaPreviewRow {
+  month: string;
+  mp_name: string;
+  client: string;
+  type: string;
+  spec: string;
+  ab: string;
+  group: string;
+  lpu: string;
+  oblast: string;
+  date: string;
+  articul: string;
+  region: string;
+  object_type: string;
+  orientir: string;
+  dolzhnost: string;
+  amount_issued: string;
+  approved_amount: string;
+  actual_amount: string;
+  source_doc_id: string;
+  item_index: number;
+}
+
+/** Отчёт о синхронизации: получено/создано/обновлено/ошибки. */
+export interface BelindaSyncReport {
+  received: number;
+  created: number;
+  updated: number;
+  failed: number;
+  errors: { id?: string; message: string }[];
 }

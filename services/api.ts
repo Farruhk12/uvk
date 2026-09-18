@@ -8,7 +8,12 @@ import {
   ManagerProfile,
   FilterData,
   CheckWithClient,
-  MpUser
+  MpUser,
+  BelindaStagingRow,
+  BelindaSyncReport,
+  BelindaUvkScanResult,
+  BelindaUvkFilters,
+  BelindaPreviewRow
 } from '../types';
 
 const supabase = getSupabaseClient();
@@ -986,6 +991,182 @@ export interface CompressExistingResult {
   failed: number;
   error?: string;
 }
+
+// ——— Belinda 1С — УВК (тестовый раздел, отдельные таблицы) ———
+
+const BELINDA_SYNC_FUNCTION_SLUG = 'belinda-sync-uvk';
+
+/**
+ * Читает закэшированный результат последнего сканирования прямо из БД (мгновенно,
+ * без похода в 1С). Возвращает null, если сканирование ещё ни разу не запускалось.
+ */
+export const fetchCachedBelindaUvkScan = async (): Promise<{
+  scan: BelindaUvkScanResult;
+  updatedAt: string;
+} | null> => {
+  const { data, error } = await supabase
+    .from('belinda_uvk_filter_cache')
+    .select('*')
+    .eq('id', 'default')
+    .maybeSingle();
+
+  if (error || !data) {
+    if (error) console.error('Error fetching belinda_uvk_filter_cache:', error);
+    return null;
+  }
+
+  return {
+    scan: {
+      total: Number(data.total) || 0,
+      months: Array.isArray(data.months) ? data.months : [],
+      doctypes: Array.isArray(data.doctypes) ? data.doctypes : []
+    },
+    updatedAt: data.updated_at
+  };
+};
+
+/**
+ * "Сканирует" get_uvk без записи в БД — возвращает стандартизованные месяцы и типы
+ * документов и общее число документов. Медленно (реальный поход в 1С) — используйте
+ * fetchCachedBelindaUvkScan для быстрой загрузки.
+ */
+export const scanBelindaUvk = async (): Promise<{
+  success: boolean;
+  scan?: BelindaUvkScanResult;
+  error?: string;
+}> => {
+  try {
+    const { data, error } = await supabase.functions.invoke(BELINDA_SYNC_FUNCTION_SLUG, {
+      method: 'POST',
+      body: { mode: 'scan' }
+    });
+
+    if (error) {
+      return { success: false, error: error.message || 'Ошибка вызова функции сканирования' };
+    }
+    if (!data?.success) {
+      return { success: false, error: data?.error || 'Не удалось получить список фильтров' };
+    }
+    return { success: true, scan: data.scan };
+  } catch (e) {
+    console.error('Error invoking belinda-sync-uvk (scan):', e);
+    return { success: false, error: e instanceof Error ? e.message : 'Ошибка соединения с функцией' };
+  }
+};
+
+/**
+ * Тянет из 1С и превращает в строки (формат monthly_clients) под фильтры — БЕЗ записи в БД.
+ * Показывается пользователю для проверки перед отправкой (commitBelindaPreviewRows).
+ */
+export const previewBelindaUvk = async (
+  filters: BelindaUvkFilters
+): Promise<{
+  success: boolean;
+  rows?: BelindaPreviewRow[];
+  failed?: number;
+  errors?: { id?: string; message: string }[];
+  error?: string;
+}> => {
+  try {
+    const { data, error } = await supabase.functions.invoke(BELINDA_SYNC_FUNCTION_SLUG, {
+      method: 'POST',
+      body: { mode: 'preview', filters }
+    });
+
+    if (error) {
+      return { success: false, error: error.message || 'Ошибка вызова функции предпросмотра' };
+    }
+    if (!data?.success) {
+      return { success: false, error: data?.error || 'Не удалось получить предпросмотр' };
+    }
+    return { success: true, rows: data.rows || [], failed: data.failed || 0, errors: data.errors || [] };
+  } catch (e) {
+    console.error('Error invoking belinda-sync-uvk (preview):', e);
+    return { success: false, error: e instanceof Error ? e.message : 'Ошибка соединения с функцией' };
+  }
+};
+
+/**
+ * Отправляет строки, показанные пользователю в предпросмотре, в тестовую
+ * staging-таблицу (НЕ в боевую monthly_clients).
+ */
+export const commitBelindaPreviewRows = async (
+  rows: BelindaPreviewRow[]
+): Promise<{
+  success: boolean;
+  report?: BelindaSyncReport;
+  error?: string;
+}> => {
+  try {
+    const { data, error } = await supabase.functions.invoke(BELINDA_SYNC_FUNCTION_SLUG, {
+      method: 'POST',
+      body: { mode: 'commit', rows }
+    });
+
+    if (error) {
+      return { success: false, error: error.message || 'Ошибка вызова функции отправки' };
+    }
+    if (!data?.success) {
+      return { success: false, error: data?.error || 'Отправка завершилась с ошибками', report: data?.report };
+    }
+    return { success: true, report: data.report };
+  } catch (e) {
+    console.error('Error invoking belinda-sync-uvk (commit):', e);
+    return { success: false, error: e instanceof Error ? e.message : 'Ошибка соединения с функцией' };
+  }
+};
+
+/**
+ * Загружает последние синхронизированные строки из тестовой staging-таблицы
+ * (формат совпадает с monthly_clients — для предпросмотра перед переносом в прод).
+ */
+export const fetchBelindaStagingRows = async (): Promise<BelindaStagingRow[]> => {
+  const PAGE_SIZE = 1000;
+  const allRows: any[] = [];
+  let offset = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from('belinda_monthly_clients_staging')
+      .select('*')
+      .order('synced_at', { ascending: false })
+      .range(offset, offset + PAGE_SIZE - 1);
+
+    if (error) {
+      console.error('Error fetching belinda_monthly_clients_staging:', error);
+      break;
+    }
+    if (!data || data.length === 0) break;
+    allRows.push(...data);
+    if (data.length < PAGE_SIZE) hasMore = false;
+    else offset += PAGE_SIZE;
+  }
+
+  return allRows.map((r: any) => ({
+    id: r.id,
+    month: normalize(r.month),
+    mpName: normalize(r.mp_name),
+    client: normalize(r.client),
+    type: normalize(r.type),
+    spec: normalize(r.spec),
+    ab: normalize(r.ab),
+    group: normalize(r.group),
+    lpu: normalize(r.lpu),
+    oblast: normalize(r.oblast),
+    date: normalize(r.date),
+    articul: normalize(r.articul),
+    region: normalize(r.region),
+    objectType: normalize(r.object_type),
+    orientir: normalize(r.orientir),
+    dolzhnost: normalize(r.dolzhnost),
+    amountIssued: normalize(r.amount_issued),
+    approvedAmount: normalize(r.approved_amount),
+    actualAmount: normalize(r.actual_amount),
+    sourceDocId: normalize(r.source_doc_id),
+    syncedAt: r.synced_at
+  }));
+};
 
 export const compressExistingChecks = async (
   month: string,
