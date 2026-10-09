@@ -2,9 +2,9 @@
 //
 // Три режима вызова (POST, JSON body):
 //   { "mode": "scan" }
-//     — быстро тянет get_uvk, возвращает стандартизованные месяцы (из поля
-//       date, а не грязного поля month из 1С) и типы документов + общее
-//       число документов. НИЧЕГО не пишет в БД.
+//     — быстро тянет get_uvk, возвращает месяцы (из поля 1С `month` документа,
+//       запасной вариант — из поля date) и типы документов + общее число
+//       документов. НИЧЕГО не пишет в БД.
 //   { "mode": "preview", "filters": { months?, doctypes?, dateFrom?, dateTo? } }
 //     — тянет документы под фильтры, превращает в строки в формате
 //       monthly_clients и ВОЗВРАЩАЕТ их клиенту. НИЧЕГО не пишет в БД —
@@ -54,12 +54,21 @@ const numOrEmpty = (v: unknown): string => {
 
 const strOrEmpty = (v: unknown): string => (v == null ? '' : String(v).trim());
 
-/** Месяц в формате "Январь 2026" — из ISO-даты документа, а не из грязного поля 1С `month`. */
+/** Месяц в формате "Январь 2026" — вычисляется из ISO-даты документа. Используется только
+ *  как запасной вариант, если поле 1С `month` у документа пустое. */
 const monthFromIsoDate = (iso: unknown): string => {
   if (typeof iso !== 'string' || !iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   return `${RU_MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+};
+
+/** Месяц документа — берём как есть из поля 1С `month` (например "Сентябрь 2026"),
+ *  а не вычисляем из даты: 1С может выставлять документ в отчётный месяц, который
+ *  не совпадает с календарной датой визита. Если поле пустое — считаем из даты. */
+const monthFromDoc = (doc: Record<string, unknown>): string => {
+  const raw = strOrEmpty(doc.month).replace(/\s+/g, ' ');
+  return raw || monthFromIsoDate(doc.date);
 };
 
 /** Ключ для хронологической сортировки месяцев вида "Январь 2026". */
@@ -93,9 +102,9 @@ interface Filters {
   dateTo?: string; // "YYYY-MM-DD"
 }
 
-// Фильтры по шапке документа (месяц считается из date, не из грязного поля 1С month).
+// Фильтры по шапке документа (месяц берём из поля 1С month, см. monthFromDoc).
 const matchesHeaderFilters = (doc: Record<string, unknown>, filters: Filters): boolean => {
-  if (filters.months?.length && !filters.months.includes(monthFromIsoDate(doc.date))) return false;
+  if (filters.months?.length && !filters.months.includes(monthFromDoc(doc))) return false;
   if (filters.doctypes?.length && !filters.doctypes.includes(strOrEmpty(doc.doctype))) return false;
   if (filters.dateFrom || filters.dateTo) {
     const d = typeof doc.date === 'string' ? doc.date.slice(0, 10) : '';
@@ -187,7 +196,7 @@ function buildRows(docsInScope: Record<string, unknown>[]): {
       continue;
     }
 
-    const month = monthFromIsoDate(doc.date);
+    const month = monthFromDoc(doc);
     const mpName = strOrEmpty(doc.employee);
 
     if (!month || !mpName) {
@@ -342,7 +351,7 @@ Deno.serve(async (req: Request) => {
     const doctypes = new Set<string>();
 
     for (const doc of allDocs) {
-      const m = monthFromIsoDate(doc.date);
+      const m = monthFromDoc(doc);
       const dt = strOrEmpty(doc.doctype);
       if (m) months.add(m);
       if (dt) doctypes.add(dt);
