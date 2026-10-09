@@ -724,12 +724,96 @@ export const deleteMonthlyClientsByMonth = async (month: string): Promise<ApiRes
 const rowKey = (r: { month: string; mp_name: string; client: string }) =>
   `${(r.month || '').trim()}|${(r.mp_name || '').trim()}|${(r.client || '').trim()}`;
 
+/** Утверждённая сумма не назначена или равна нулю — такую строку (без чека) считаем неактуальной. */
+const isApprovedAmountEmpty = (value: string | undefined): boolean => {
+  const normalized = (value ?? '').toString().trim().replace(/\s/g, '').replace(',', '.');
+  if (normalized === '') return true;
+  const num = parseFloat(normalized);
+  return isNaN(num) || num <= 0;
+};
+
 const CHUNK_SIZE = 200;
 
 export type UploadProgressCallback = (pct: number, status: string) => void;
 
 /**
- * Upsert с сохранением id: обновляет существующие строки, добавляет новые, удаляет отсутствующие в Excel.
+ * Удаляет строки, отсутствующие в новом Excel (`keptKeys`), но только если по ним ещё не
+ * загружен чек — такие записи считаем "врач больше не актуален, можно убрать". Строки
+ * с привязанным чеком не трогаем, иначе потеряется история подтверждённого чека.
+ *
+ * Важно: загрузка часто бывает частичной (только одна группа/один МП из 1С за раз), поэтому
+ * очистка ограничена парами (month, mp_name), которые реально присутствуют в загружаемом файле
+ * — данные МП, которых в этой загрузке вообще нет, не трогаем.
+ */
+const removeStaleMonthlyClients = async (
+  mpNamesByMonth: Map<string, Set<string>>,
+  keptKeys: Set<string>
+): Promise<{ deleted: number; keptWithChecks: number }> => {
+  let deleted = 0;
+  let keptWithChecks = 0;
+  const BATCH = 500;
+
+  for (const [month, mpNames] of mpNamesByMonth) {
+    for (const mpName of mpNames) {
+      const existing: { id: any; mp_name: string; client: string }[] = [];
+      let offset = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('monthly_clients')
+          .select('id, mp_name, client')
+          .eq('month', month)
+          .eq('mp_name', mpName)
+          .range(offset, offset + PAGE_SIZE - 1);
+        if (error) {
+          console.error('Error fetching monthly_clients for cleanup:', error);
+          hasMore = false;
+          break;
+        }
+        if (!data || data.length === 0) break;
+        existing.push(...data);
+        if (data.length < PAGE_SIZE) hasMore = false;
+        else offset += PAGE_SIZE;
+      }
+
+      const staleIds = existing
+        .filter((r) => !keptKeys.has(rowKey({ month, mp_name: r.mp_name, client: r.client })))
+        .map((r) => r.id);
+      if (staleIds.length === 0) continue;
+
+      const idsWithChecks = new Set<string>();
+      for (let i = 0; i < staleIds.length; i += BATCH) {
+        const batch = staleIds.slice(i, i + BATCH);
+        const { data: checksData, error: checksError } = await supabase
+          .from('checks')
+          .select('monthly_client_id')
+          .in('monthly_client_id', batch);
+        if (!checksError && checksData) {
+          checksData.forEach((c: any) => idsWithChecks.add(String(c.monthly_client_id)));
+        }
+      }
+
+      const idsToDelete = staleIds.filter((id) => !idsWithChecks.has(String(id)));
+      keptWithChecks += staleIds.length - idsToDelete.length;
+
+      for (let i = 0; i < idsToDelete.length; i += BATCH) {
+        const batch = idsToDelete.slice(i, i + BATCH);
+        const { error: deleteError } = await supabase.from('monthly_clients').delete().in('id', batch);
+        if (deleteError) {
+          console.error('Error deleting stale monthly_clients:', deleteError);
+        } else {
+          deleted += batch.length;
+        }
+      }
+    }
+  }
+
+  return { deleted, keptWithChecks };
+};
+
+/**
+ * Upsert с сохранением id: обновляет существующие строки, добавляет новые, удаляет отсутствующие в Excel
+ * (кроме тех, у кого уже есть загруженный чек — их оставляем).
  * Чеки остаются привязанными к тем же monthly_client_id.
  * Требует уникальный индекс idx_monthly_clients_upsert_key на (month, mp_name, client).
  */
@@ -755,10 +839,43 @@ export const upsertMonthlyClientsPreservingChecks = async (
     return true;
   }).reverse();
 
-  const payload = deduped.map((r) => toDbRowFull(r));
+  // Какие МП по каким месяцам реально присутствуют в этой загрузке — очистку устаревших
+  // строк делаем только для них, чтобы не затронуть МП из других групп, не вошедших в файл.
+  const mpNamesByMonth = new Map<string, Set<string>>();
+  for (const r of deduped) {
+    const month = (r.month || '').trim();
+    const mpName = (r.mp_name || '').trim();
+    if (!month || !mpName) continue;
+    if (!mpNamesByMonth.has(month)) mpNamesByMonth.set(month, new Set());
+    mpNamesByMonth.get(month)!.add(mpName);
+  }
+
+  // Строки без утверждённой суммы не записываем в базу — такого врача считаем неактуальным
+  // (его реальное удаление, с учётом чеков, выполнит removeStaleMonthlyClients ниже).
+  const activeRows = deduped.filter((r) => !isApprovedAmountEmpty(r.approved_amount));
+  const keptKeys = new Set(activeRows.map((r) => rowKey(r)));
+  const payload = activeRows.map((r) => toDbRowFull(r));
   const total = payload.length;
 
-  if (total <= CHUNK_SIZE) {
+  const conflictError = (upsertError: { message: string }): ApiResponse => {
+    const isUnknownConflict =
+      /conflict|unique|constraint/i.test(upsertError.message) &&
+      !/idx_monthly_clients_upsert_key/.test(upsertError.message);
+    if (isUnknownConflict) {
+      return {
+        success: false,
+        error:
+          'Выполните миграцию supabase_migration_monthly_clients_upsert.sql в Supabase для сохранения чеков при повторной загрузке.\n\nОшибка: ' +
+          upsertError.message
+      };
+    }
+    console.error('Error upserting monthly_clients:', upsertError);
+    return { success: false, error: upsertError.message };
+  };
+
+  if (total === 0) {
+    report(25, 'Нет строк с утверждённой суммой для загрузки...');
+  } else if (total <= CHUNK_SIZE) {
     report(25, `Загрузка ${total} строк...`);
     const { error: upsertError } = await supabase
       .from('monthly_clients')
@@ -766,59 +883,36 @@ export const upsertMonthlyClientsPreservingChecks = async (
         onConflict: 'month,mp_name,client',
         ignoreDuplicates: false
       });
-    if (upsertError) {
-      const isUnknownConflict =
-        /conflict|unique|constraint/i.test(upsertError.message) &&
-        !/idx_monthly_clients_upsert_key/.test(upsertError.message);
-      if (isUnknownConflict) {
-        return {
-          success: false,
-          error:
-            'Выполните миграцию supabase_migration_monthly_clients_upsert.sql в Supabase для сохранения чеков при повторной загрузке.\n\nОшибка: ' +
-            upsertError.message
-        };
-      }
-      console.error('Error upserting monthly_clients:', upsertError);
-      return { success: false, error: upsertError.message };
-    }
-    report(100, 'Готово');
-    return { success: true };
-  }
+    if (upsertError) return conflictError(upsertError);
+  } else {
+    const chunks = Math.ceil(total / CHUNK_SIZE);
+    for (let i = 0; i < chunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, total);
+      const chunk = payload.slice(start, end);
+      const pct = 25 + (70 * (i + 1)) / chunks;
+      report(pct, `Загрузка ${end} из ${total} строк...`);
 
-  const chunks = Math.ceil(total / CHUNK_SIZE);
-  for (let i = 0; i < chunks; i++) {
-    const start = i * CHUNK_SIZE;
-    const end = Math.min(start + CHUNK_SIZE, total);
-    const chunk = payload.slice(start, end);
-    const pct = 25 + (70 * (i + 1)) / chunks;
-    report(pct, `Загрузка ${end} из ${total} строк...`);
+      const { error: upsertError } = await supabase
+        .from('monthly_clients')
+        .upsert(chunk, {
+          onConflict: 'month,mp_name,client',
+          ignoreDuplicates: false
+        });
 
-    const { error: upsertError } = await supabase
-      .from('monthly_clients')
-      .upsert(chunk, {
-        onConflict: 'month,mp_name,client',
-        ignoreDuplicates: false
-      });
-
-    if (upsertError) {
-      const isUnknownConflict =
-        /conflict|unique|constraint/i.test(upsertError.message) &&
-        !/idx_monthly_clients_upsert_key/.test(upsertError.message);
-      if (isUnknownConflict) {
-        return {
-          success: false,
-          error:
-            'Выполните миграцию supabase_migration_monthly_clients_upsert.sql в Supabase для сохранения чеков при повторной загрузке.\n\nОшибка: ' +
-            upsertError.message
-        };
-      }
-      console.error('Error upserting monthly_clients:', upsertError);
-      return { success: false, error: upsertError.message };
+      if (upsertError) return conflictError(upsertError);
     }
   }
+
+  report(90, 'Удаление неактуальных записей...');
+  const { deleted, keptWithChecks } = await removeStaleMonthlyClients(mpNamesByMonth, keptKeys);
 
   report(100, 'Готово');
-  return { success: true };
+  const warning =
+    keptWithChecks > 0
+      ? `Внимание: ${keptWithChecks} запись(ей) отсутствует в новом файле, но оставлена(ы), так как по ним уже загружен чек.`
+      : undefined;
+  return { success: true, warning, deletedStale: deleted, keptWithChecks };
 };
 
 // ——— Пользователи (МП) — те, кто отправляют чеки ———
