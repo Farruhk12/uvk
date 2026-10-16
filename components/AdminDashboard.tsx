@@ -390,14 +390,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
 
     monitoringStats.forEach(stat => {
         const meta = allEmployees.find(e => e.name === stat.name);
-        // Explicitly avoid optional chaining
-        const oblast = (meta && meta.oblast) ? meta.oblast.trim() : 'Без области';
-        const group = (meta && meta.group) ? meta.group.trim() : 'Общая группа';
+        const metaOblast = (meta && meta.oblast) ? meta.oblast.trim() : '';
+        const metaGroup = (meta && meta.group) ? meta.group.trim() : '';
 
-        if (!groups[oblast]) groups[oblast] = {};
-        if (!groups[oblast][group]) groups[oblast][group] = [];
+        // Группы/области берём из загруженной базы (клиенты), а не только из users
+        const buckets = new Map<string, Client[]>();
+        (stat.clients || []).forEach(c => {
+            const o = (c.oblast || '').trim() || metaOblast || 'Без области';
+            const g = (c.group || '').trim() || metaGroup || 'Общая группа';
+            const key = o + '\u0000' + g;
+            if (!buckets.has(key)) buckets.set(key, []);
+            buckets.get(key)!.push(c);
+        });
 
-        groups[oblast][group].push(stat);
+        if (buckets.size === 0) {
+            const oblast = metaOblast || 'Без области';
+            const group = metaGroup || 'Общая группа';
+            if (!groups[oblast]) groups[oblast] = {};
+            if (!groups[oblast][group]) groups[oblast][group] = [];
+            groups[oblast][group].push(stat);
+            return;
+        }
+
+        buckets.forEach((clients, key) => {
+            const [oblast, group] = key.split('\u0000');
+            if (!groups[oblast]) groups[oblast] = {};
+            if (!groups[oblast][group]) groups[oblast][group] = [];
+            groups[oblast][group].push({
+                ...stat,
+                total: clients.length,
+                sent: clients.filter(c => isClientSentByStatus(c.status)).length,
+                clients
+            });
+        });
     });
 
     return groups;

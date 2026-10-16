@@ -381,20 +381,35 @@ export const fetchFilters = async (): Promise<FilterData> => {
       group: normalize(u.group)
     }));
 
-    const mps = Array.from(new Set(items.map((i) => i.name))).filter(Boolean);
-    const groups = Array.from(new Set(items.map((i) => i.group))).filter(Boolean);
-
-    // Области: из users + из monthly_clients (чтобы были все области из Excel)
-    const oblastsFromUsers = items.map((i) => i.oblast).filter(Boolean);
-    let oblastsFromDb: string[] = [];
-    const { data: mcRows } = await supabase
-      .from('monthly_clients')
-      .select('oblast')
-      .limit(5000);
-    if (mcRows) {
-      oblastsFromDb = mcRows.map((r: any) => normalize(r?.oblast ?? '')).filter(Boolean);
+    // Данные из загруженной базы (1С/Excel): МП, области и группы тоже берём оттуда
+    const mcRows: any[] = [];
+    for (let offset = 0; ; offset += 1000) {
+      const { data: page } = await supabase
+        .from('monthly_clients')
+        .select('mp_name, oblast, group')
+        .range(offset, offset + 999);
+      if (!page || page.length === 0) break;
+      mcRows.push(...page);
+      if (page.length < 1000) break;
     }
-    const oblasts = Array.from(new Set([...oblastsFromUsers, ...oblastsFromDb])).filter(Boolean).sort();
+    const known = new Set(items.map((i) => i.name));
+    const dbMeta = new Map<string, { name: string; oblast: string; group: string }>();
+    mcRows.forEach((r: any) => {
+      const name = normalize(r?.mp_name ?? '');
+      if (!name || known.has(name) || dbMeta.has(name)) return;
+      dbMeta.set(name, { name, oblast: normalize(r?.oblast ?? ''), group: normalize(r?.group ?? '') });
+    });
+    dbMeta.forEach((m) => items.push(m));
+
+    const mps = Array.from(new Set(items.map((i) => i.name))).filter(Boolean);
+    const groups = Array.from(new Set([
+      ...items.map((i) => i.group),
+      ...mcRows.map((r: any) => normalize(r?.group ?? ''))
+    ])).filter(Boolean);
+    const oblasts = Array.from(new Set([
+      ...items.map((i) => i.oblast),
+      ...mcRows.map((r: any) => normalize(r?.oblast ?? ''))
+    ])).filter(Boolean).sort();
 
     return { mps, groups, oblasts, items };
   } catch (e) {
