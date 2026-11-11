@@ -37,6 +37,10 @@ export const compressImage = (file: File, maxWidth = 800, quality = 0.45): Promi
             reject(new Error("Could not get canvas context"));
             return;
         }
+        // JPEG не поддерживает прозрачность: без белой подложки прозрачные
+        // области (PNG, скриншоты, WebP) превращаются в чёрные
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
         
         // Convert to base64
