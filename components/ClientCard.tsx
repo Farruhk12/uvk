@@ -18,7 +18,10 @@ export const ClientCard: React.FC<ClientCardProps> = ({ client, mpName, onUpdate
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
-  
+  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
+  const [showCheck, setShowCheck] = useState(false);
+  const checkUrl = uploadedUrl || client.checkImageUrl || null;
+
   const isRejected = client.checkStatus === 'rejected';
   const isSent = (isClientSentByStatus(client.status) || !!client.checkStatus || hasLocalSent) && !isRejected;
 
@@ -73,6 +76,7 @@ export const ClientCard: React.FC<ClientCardProps> = ({ client, mpName, onUpdate
       const result = await uploadCheck(payload);
       
       if (result.success) {
+        if (result.imageUrl) setUploadedUrl(result.imageUrl);
         onUpdateStatus(client.client);
         clearFile();
       } else {
@@ -93,6 +97,27 @@ export const ClientCard: React.FC<ClientCardProps> = ({ client, mpName, onUpdate
             onCapture={handleCameraCapture} 
             onClose={() => setShowCamera(false)} 
         />
+      )}
+
+      {showCheck && checkUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setShowCheck(false)}
+        >
+          <button
+            onClick={() => setShowCheck(false)}
+            className="absolute top-4 right-4 p-2 bg-white/20 text-white rounded-full"
+            aria-label="Закрыть"
+          >
+            <X size={24} />
+          </button>
+          <img
+            src={checkUrl}
+            alt="Отправленный чек"
+            className="max-w-full max-h-full object-contain rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
       )}
 
       <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-4 transition-all duration-200 active:scale-[0.99]">
@@ -142,6 +167,15 @@ export const ClientCard: React.FC<ClientCardProps> = ({ client, mpName, onUpdate
                       <CheckCircle size={18} className="mr-2" />
                       {client.checkStatus === 'approved' ? 'ЧЕК ПРИНЯТ' : 'ЧЕК ОТПРАВЛЕН'}
                   </div>
+                  {checkUrl && (
+                    <button
+                      onClick={() => setShowCheck(true)}
+                      className="flex items-center justify-center gap-2 py-2.5 bg-white border-2 border-slate-200 text-slate-600 font-medium rounded-xl active:bg-slate-50 transition-colors"
+                    >
+                      <ImageIcon size={18} />
+                      <span>Посмотреть чек</span>
+                    </button>
+                  )}
               </div>
           ) : null}
 

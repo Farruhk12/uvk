@@ -22,3 +22,10 @@ export const getMonthOptions = (): string[] => {
   }
   return opts;
 };
+/** Предыдущий месяц (чеки отправляют за прошлый месяц), напр. «Октябрь 2026» в ноябре. */
+export const getDefaultMonth = (): string => {
+  const now = new Date();
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const label = `${MONTH_NAMES[prev.getMonth()]} ${prev.getFullYear()}`;
+  return getMonthOptions().includes(label) ? label : '';
+};

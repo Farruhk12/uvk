@@ -362,7 +362,7 @@ export const uploadCheck = async (payload: UploadPayload): Promise<ApiResponse> 
     return { success: false, error: 'Не удалось сохранить чек в базе' };
   }
 
-  return { success: true };
+  return { success: true, imageUrl: publicUrl };
 };
 
 export const fetchFilters = async (): Promise<FilterData> => {

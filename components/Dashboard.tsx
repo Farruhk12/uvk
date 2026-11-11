@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, Client } from '../types';
 import { fetchClients } from '../services/api';
-import { MONTH_NAMES, getMonthOptions } from '../constants';
+import { MONTH_NAMES, getMonthOptions, getDefaultMonth } from '../constants';
 import { isClientSentByStatus } from '../utils/status';
 import { ClientCard } from './ClientCard';
 import { Stats } from './Stats';
@@ -13,7 +13,7 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
-  const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [selectedMonth, setSelectedMonth] = useState<string>(getDefaultMonth);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +25,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
   const [localSentState, setLocalSentState] = useState<Record<string, boolean>>({});
 
   const monthOptions = useMemo(() => getMonthOptions(), []);
+
+  // Сколько дней осталось до последнего дня сдачи (включая сегодня = 0)
+  const DEADLINE_DAY = 16;
+  const daysLeft = DEADLINE_DAY - new Date().getDate();
 
   const loadClients = async (month: string) => {
     if (!month) return;
@@ -46,7 +50,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
     }
   };
 
-  const handleMonthChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  // При входе сразу открываем предыдущий месяц
+  useEffect(() => {
+    if (selectedMonth) loadClients(selectedMonth);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleMonthChange =(e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     setSelectedMonth(val);
     loadClients(val);
@@ -110,6 +120,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
       </div>
 
       <div className="container mx-auto px-4 mt-6 max-w-lg">
+        {/* Deadline warning */}
+        <div className="mb-4 bg-red-50 border-2 border-red-300 rounded-2xl px-4 py-3 text-red-700 flex items-start gap-3">
+          <AlertCircle size={22} className="flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-extrabold text-sm uppercase tracking-wide">
+              Максимальный срок сдачи чеков — до {DEADLINE_DAY} числа текущего месяца!
+            </p>
+            <p className="font-bold text-sm mt-1">
+              {daysLeft > 1 && `Осталось дней: ${daysLeft}`}
+              {daysLeft === 1 && 'Остался 1 день'}
+              {daysLeft === 0 && 'Сегодня последний день!'}
+              {daysLeft < 0 && 'Срок сдачи истёк!'}
+            </p>
+          </div>
+        </div>
+
         {/* Month Selector & Refresh */}
         <div className="flex gap-3 mb-6">
             <div className="relative flex-1 group">

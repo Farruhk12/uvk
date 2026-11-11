@@ -22,7 +22,7 @@ import {
   compressExistingChecks,
   deleteCheck
 } from '../services/api';
-import { MONTH_NAMES, getMonthOptions, STORAGE_LIMIT_BYTES } from '../constants';
+import { MONTH_NAMES, getMonthOptions, getDefaultMonth, STORAGE_LIMIT_BYTES } from '../constants';
 import { isClientSentByStatus } from '../utils/status';
 import {
   LogOut,
@@ -96,7 +96,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   });
   
   // State for Monitoring Tab
-  const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [selectedMonth, setSelectedMonth] = useState<string>(getDefaultMonth);
   const [monitoringStats, setMonitoringStats] = useState<MonitoringStat[]>([]);
   const [expandedEmployee, setExpandedEmployee] = useState<string | null>(null);
   const [monitoringOblast, setMonitoringOblast] = useState<string>('');
@@ -104,7 +104,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   const [monitoringEmployee, setMonitoringEmployee] = useState<string>('');
 
   // State for Checks Tab
-  const [checksMonth, setChecksMonth] = useState<string>('');
+  const [checksMonth, setChecksMonth] = useState<string>(getDefaultMonth);
   const [checks, setChecks] = useState<CheckWithClient[]>([]);
   const [checksLoading, setChecksLoading] = useState(false);
   const [selectedCheck, setSelectedCheck] = useState<{
@@ -131,7 +131,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   const [compressProgress, setCompressProgress] = useState<{ current: number; total: number; status: string } | null>(null);
 
   // State for Database (Excel) Tab
-  const [dbMonth, setDbMonth] = useState<string>('');
+  const [dbMonth, setDbMonth] = useState<string>(getDefaultMonth);
   const [dbClients, setDbClients] = useState<Client[]>([]);
   const [dbLoading, setDbLoading] = useState(false);
   const [dbUploading, setDbUploading] = useState(false);
