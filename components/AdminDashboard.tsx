@@ -389,6 +389,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     if (monitoringStats.length === 0) return {};
 
     monitoringStats.forEach(stat => {
+        // Сотрудников без клиентов (0/0) не показываем
+        if (!stat.loading && stat.total === 0) return;
         const meta = allEmployees.find(e => e.name === stat.name);
         const metaOblast = (meta && meta.oblast) ? meta.oblast.trim() : '';
         const metaGroup = (meta && meta.group) ? meta.group.trim() : '';
